@@ -22,7 +22,7 @@ Leveraging the power of [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-in
 
 ## Examples
 
-![Example animation|500](static/example-gif.gif)
+![Image](https://github.com/user-attachments/assets/1ad1886b-43a2-44f6-ab92-3c5c3de271aa)
 
 ## Installation
 
