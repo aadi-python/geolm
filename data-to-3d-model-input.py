@@ -10,6 +10,7 @@ import tempfile
 import argparse
 from datetime import datetime  # Import datetime
 import re  # Import regex for parsing
+import csv  # Add csv import
 
 # Attempt to import the Llama API client, handle import error gracefully
 try:
@@ -271,6 +272,99 @@ def save_generated_data(points_csv, orientations_csv, output_dir):
 # --- End LLM Helper Functions ---
 
 
+# --- CSV Structural Definition Loading ---
+
+# Mapping from CSV string to GemPy enum
+RELATION_MAP = {
+    "ERODE": gp.data.StackRelationType.ERODE,
+    "ONLAP": gp.data.StackRelationType.ONLAP,
+    "BASEMENT": gp.data.StackRelationType.BASEMENT,
+    # Add other relations if needed, e.g., FAULT
+}
+
+
+def load_structural_definitions(filepath: str):
+    """Loads structural group definitions from a CSV file."""
+    definitions = []
+    try:
+        with open(filepath, "r", newline="") as csvfile:
+            reader = csv.DictReader(csvfile)
+            if not all(
+                col in reader.fieldnames
+                for col in ["group_index", "group_name", "elements", "relation"]
+            ):
+                print(
+                    f"Error: CSV file '{filepath}' is missing required columns (group_index, group_name, elements, relation)."
+                )
+                return None
+
+            for row in reader:
+                try:
+                    index = int(row["group_index"].strip())
+                    name = row["group_name"].strip()
+                    # Split elements by comma, strip whitespace from each element name
+                    elements_list = [
+                        elem.strip()
+                        for elem in row["elements"].split(",")
+                        if elem.strip()
+                    ]
+                    relation_str = row["relation"].strip().upper()
+
+                    if not name:
+                        print(
+                            f"Warning: Skipping row {reader.line_num} due to empty group_name."
+                        )
+                        continue
+                    if not elements_list:
+                        print(
+                            f"Warning: Skipping row {reader.line_num} (group '{name}') due to empty elements list."
+                        )
+                        continue
+                    if relation_str not in RELATION_MAP:
+                        print(
+                            f"Warning: Skipping row {reader.line_num} (group '{name}') due to invalid relation '{row['relation']}'. Valid relations are: {list(RELATION_MAP.keys())}"
+                        )
+                        continue
+
+                    relation_enum = RELATION_MAP[relation_str]
+
+                    definitions.append(
+                        {
+                            "group_index": index,
+                            "group_name": name,
+                            "elements": elements_list,
+                            "relation": relation_enum,
+                        }
+                    )
+                except ValueError:
+                    print(
+                        f"Warning: Skipping row {reader.line_num} due to invalid integer value for group_index ('{row['group_index']}')."
+                    )
+                    continue
+                except KeyError as e:
+                    print(
+                        f"Warning: Skipping row {reader.line_num} due to missing column: {e}"
+                    )
+                    continue
+
+    except FileNotFoundError:
+        print(f"Error: Structural definitions file not found: {filepath}")
+        return None
+    except Exception as e:
+        print(f"Error reading structural definitions file '{filepath}': {e}")
+        return None
+
+    if not definitions:
+        print(f"Warning: No valid structural definitions loaded from '{filepath}'.")
+        return None  # Return None if no valid definitions were loaded
+
+    print(f"Loaded {len(definitions)} structural definitions from {filepath}.")
+    return definitions
+
+
+# --- End CSV Loading ---
+
+
 # Functions to use Llama 4 API to generate input data - Now implemented indirectly
 
 
@@ -340,43 +434,72 @@ def initialize_geomodel_with_tmp_files(project_name: str) -> gp.data.GeoModel:
     return geo_model
 
 
-def define_structural_groups(geo_model: gp.data.GeoModel):
-    """Defines the structural groups and relationships for the model."""
-    gp.add_structural_group(
-        model=geo_model,
-        group_index=0,
-        structural_group_name="seafloor_series",
-        elements=[geo_model.structural_frame.get_element_by_name("seafloor")],
-        structural_relation=gp.data.StackRelationType.ERODE,
-    )
+def define_structural_groups(geo_model: gp.data.GeoModel, structural_definitions: list):
+    """Defines the structural groups and relationships for the model based on loaded definitions."""
+    if not structural_definitions:
+        print("Error: No structural definitions provided. Cannot define groups.")
+        raise ValueError("Structural definitions are required.")
 
-    gp.add_structural_group(
-        model=geo_model,
-        group_index=1,
-        structural_group_name="right_series",
-        elements=[
-            geo_model.structural_frame.get_element_by_name("rock1"),
-            geo_model.structural_frame.get_element_by_name("rock2"),
-        ],
-        structural_relation=gp.data.StackRelationType.ONLAP,
-    )
+    defined_groups = set()
+    for definition in structural_definitions:
+        group_index = definition["group_index"]
+        group_name = definition["group_name"]
+        element_names = definition["elements"]
+        relation = definition["relation"]
 
-    gp.add_structural_group(
-        model=geo_model,
-        group_index=2,
-        structural_group_name="onlap_series",
-        elements=[geo_model.structural_frame.get_element_by_name("onlap_surface")],
-        structural_relation=gp.data.StackRelationType.ERODE,
-    )
+        print(
+            f"Defining group '{group_name}' (Index: {group_index}, Relation: {relation.name})..."
+        )
 
-    gp.add_structural_group(
-        model=geo_model,
-        group_index=3,
-        structural_group_name="left_series",
-        elements=[geo_model.structural_frame.get_element_by_name("rock3")],
-        structural_relation=gp.data.StackRelationType.BASEMENT,
-    )
+        # Retrieve element objects from the model
+        elements = []
+        missing_elements = []
+        for name in element_names:
+            try:
+                element = geo_model.structural_frame.get_element_by_name(name)
+                elements.append(element)
+            except ValueError:
+                missing_elements.append(name)
 
+        if missing_elements:
+            print(
+                f"  Error: Could not find the following elements required for group '{group_name}': {missing_elements}"
+            )
+            print(
+                f"  Available elements: {list(geo_model.structural_frame.structural_elements.keys())}"
+            )
+            raise ValueError(
+                f"Missing elements for group '{group_name}'. Check input data or structural definition file."
+            )
+
+        if not elements:
+            print(
+                f"  Error: No valid elements found for group '{group_name}'. Skipping definition."
+            )
+            continue  # Skip this definition if no elements were successfully found
+
+        try:
+            gp.add_structural_group(
+                model=geo_model,
+                group_index=group_index,
+                structural_group_name=group_name,
+                elements=elements,
+                structural_relation=relation,
+            )
+            defined_groups.add(group_name)
+            print(
+                f"  Successfully defined group '{group_name}' with elements: {[e.name for e in elements]}"
+            )
+        except Exception as e:
+            print(f"  Error defining structural group '{group_name}': {e}")
+            # Depending on the error, you might want to raise it or just continue
+            raise e  # Re-raise the exception to stop execution if definition fails
+
+    # Optional: Check if any groups defined in the model were *not* in the CSV
+    # all_model_groups = set(geo_model.structural_frame.structural_groups.keys())
+    # undefined_in_csv = all_model_groups - defined_groups
+    # if undefined_in_csv:
+    #     print(f"Warning: The following groups exist in the model but were not defined in the CSV: {undefined_in_csv}")
     gp.remove_structural_group_by_name(model=geo_model, group_name="default_formation")
 
 
@@ -473,6 +596,12 @@ def main():
         help="Directory to save LLM-generated input files (used only if --input-mode=llm).",
     )
     parser.add_argument(
+        "--structural-defs-file",
+        type=str,
+        default="input-data/default/default_structure.csv",  # Default path
+        help="Path to the structural definitions CSV file.",
+    )
+    parser.add_argument(
         "--prompt-type",
         type=str,
         default="default",
@@ -528,19 +657,36 @@ def main():
     # Define structural framework
     # Ensure the surfaces/series defined in the (potentially modified) data exist
     try:
-        define_structural_groups(geo_model)
+        print(f"Loading structural definitions from: {args.structural_defs_file}")
+        structural_definitions = load_structural_definitions(args.structural_defs_file)
+        if structural_definitions is None:
+            print("Failed to load structural definitions. Exiting.")
+            return  # Exit if loading failed
+
+        define_structural_groups(geo_model, structural_definitions)
     except KeyError as e:
-        print(f"\nError defining structural groups: {e}")
-        print("This likely means the LLM generated data with surface/series names")
+        print(f"\nError defining structural groups: Key '{e}' not found.")
         print(
-            "that don't match the expected names in the define_structural_groups function."
+            "This likely means the data (points/orientations CSV) or the structural definitions CSV"
+        )
+        print("references a surface/series name that does not exist in the input data.")
+        print(
+            f"  Check surface names in: {args.points_file}, {args.orientations_file}, {args.structural_defs_file}"
         )
         print(
-            "Please check the generated files or adjust the define_structural_groups function."
+            f"  Available elements in model based on input: {list(geo_model.structural_frame.structural_elements.keys())}"
         )
         return  # Stop execution if groups can't be defined
+    except (
+        ValueError
+    ) as e:  # Catch specific ValueErrors raised by define_structural_groups or load
+        print(f"\nError during structural group definition: {e}")
+        return
     except Exception as e:
         print(f"\nAn unexpected error occurred defining structural groups: {e}")
+        import traceback
+
+        traceback.print_exc()  # Print stack trace for unexpected errors
         return
 
     # Compute and plot
