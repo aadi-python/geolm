@@ -78,18 +78,29 @@ def input_orientations():
 def get_llm_prompt(prompt_type: str) -> str:
     """Builds and returns the appropriate LLM prompt string based on the type."""
 
-    prompt_intro = "You are a helpful assistant for geological modeling. Please generate two completely new CSV datasets suitable for GemPy: surface points and orientations."
+    prompt_intro = "You are a helpful assistant for geological modeling. Please generate three completely new CSV datasets suitable for GemPy: surface points, orientations, and structural group definitions."
     prompt_format_suffix = """Ensure the output format is exactly CSV, with the correct columns as shown in the reference/examples.
-Clearly separate the two datasets using '=== POINTS DATA ===' and '=== ORIENTATIONS DATA ===' markers.
+Clearly separate the three datasets using '=== POINTS DATA ===', '=== ORIENTATIONS DATA ===', and '=== STRUCTURE DATA ===' markers.
 Include the CSV data within markdown code blocks (```csv ... ```).
+For the structure data, use only the following relations: ERODE, ONLAP, BASEMENT.
 
 Now, generate the data, keeping the structure and headers consistent. Start with '=== POINTS DATA ==='."""
 
     prompt_task = ""
     prompt_examples = ""
 
+    # --- Example Structure Data --- (Using the default as an example)
+    structure_example = """
+group_index,group_name,elements,relation
+0,seafloor_series,seafloor,ERODE
+1,right_series,"rock1,rock2",ONLAP
+2,onlap_series,onlap_surface,ERODE
+3,left_series,rock3,BASEMENT
+"""
+    # ------------------------------
+
     if prompt_type == "default":
-        prompt_task = "Please generate two CSV datasets for GemPy: surface points and orientations.\nUse the following examples as a base, but introduce some small modifications like changing some dip/azimuth values, adding or removing a rock type/surface, or adjusting point coordinates slightly."
+        prompt_task = "Please generate three CSV datasets for GemPy: surface points, orientations, and structural definitions.\nUse the following examples as a base, but introduce some small modifications like changing some dip/azimuth values, adding or removing a rock type/surface (and updating structure accordingly), or adjusting point coordinates slightly."
         prompt_examples = f"""Example Points Data:
 ```csv
 {input_points().strip()}
@@ -98,10 +109,15 @@ Now, generate the data, keeping the structure and headers consistent. Start with
 Example Orientations Data:
 ```csv
 {input_orientations().strip()}
+```
+
+Example Structure Data:
+```csv
+{structure_example.strip()}
 ```"""
 
     elif prompt_type == "random":
-        prompt_task = "Please generate two completely new CSV datasets suitable for GemPy: surface points and orientations.\nInvent a plausible but random geological structure (e.g., folded layers, a simple fault, an intrusion). Do NOT use the example data provided below as a base, only use it for format reference.\nDefine at least 3-5 distinct surfaces/rock types.\nGenerate a reasonable number of points (15-30) and orientations (10-20) to define the structure."
+        prompt_task = "Please generate three completely new CSV datasets suitable for GemPy: surface points, orientations, and structural group definitions.\nInvent a plausible but random geological structure (e.g., folded layers, a simple fault, an intrusion). Do NOT use the example data provided below as a base, only use it for format reference.\nDefine at least 3-5 distinct surfaces/rock types.\nGenerate a reasonable number of points (15-30) and orientations (10-20) to define the structure.\nEnsure the structural definitions reference only the surfaces/rock types defined in the points data and use only ERODE, ONLAP, or BASEMENT relations."
         prompt_examples = f"""Points Data Format Reference (DO NOT COPY VALUES):
 ```csv
 {input_points().strip()}
@@ -110,6 +126,11 @@ Example Orientations Data:
 Orientations Data Format Reference (DO NOT COPY VALUES):
 ```csv
 {input_orientations().strip()}
+```
+
+Structure Data Format Reference (DO NOT COPY VALUES):
+```csv
+{structure_example.strip()}
 ```"""
 
     else:
@@ -177,7 +198,7 @@ def generate_data_with_llm(client, prompt, temperature):
 
 
 def parse_llm_response(llm_response_object):
-    """Parses the LLM response object to extract points and orientations CSV data."""
+    """Parses the LLM response object to extract points, orientations, and structure CSV data."""
     response_text = None
     try:
         # Extract the text content from the response object structure
@@ -192,15 +213,15 @@ def parse_llm_response(llm_response_object):
             print("Error: Unexpected LLM response object structure.")
             # Optionally log the object structure for debugging
             # print(f"LLM Response Object: {llm_response_object}")
-            return None, None
+            return None, None, None  # Return three Nones
 
     except AttributeError as e:
         print(f"Error accessing attributes in LLM response object: {e}")
-        return None, None
+        return None, None, None  # Return three Nones
 
     if not response_text:
         print("Error: No text content found in LLM response.")
-        return None, None
+        return None, None, None  # Return three Nones
 
     # Use regex to find the data blocks, allowing for potential markdown code fences
     # (?s) flag makes . match newlines
@@ -209,7 +230,7 @@ def parse_llm_response(llm_response_object):
     )
     if not points_match:  # Fallback without code fences
         points_match = re.search(
-            r"(?s)=== POINTS DATA ===\n(.*?)(\n=== ORIENTATIONS DATA ===|\Z)",
+            r"(?s)=== POINTS DATA ===\n(.*?)\n=== ORIENTATIONS DATA ===",
             response_text,
         )
 
@@ -218,38 +239,55 @@ def parse_llm_response(llm_response_object):
     )
     if not orientations_match:  # Fallback without code fences
         orientations_match = re.search(
-            r"(?s)=== ORIENTATIONS DATA ===\n(.*?)\Z", response_text
+            r"(?s)=== ORIENTATIONS DATA ===\n(.*?)\n=== STRUCTURE DATA ===",
+            response_text,
+        )
+
+    structure_match = re.search(
+        r"(?s)=== STRUCTURE DATA ===.*?```csv\n(.*?)\n```", response_text
+    )
+    if not structure_match:  # Fallback without code fences
+        structure_match = re.search(
+            r"(?s)=== STRUCTURE DATA ===\n(.*?)\Z", response_text
         )
 
     points_csv = points_match.group(1).strip() if points_match else None
     orientations_csv = (
         orientations_match.group(1).strip() if orientations_match else None
     )
+    structure_csv = (
+        structure_match.group(1).strip() if structure_match else None
+    )  # Extract structure_csv
 
-    if not points_csv or not orientations_csv:
+    if (
+        not points_csv or not orientations_csv or not structure_csv
+    ):  # Check structure_csv too
         print(
-            "Error: Could not parse both points and orientations data from LLM response text."
+            "Error: Could not parse points, orientations, and/or structure data from LLM response text."
         )
         print(
-            "Expected format markers: === POINTS DATA === and === ORIENTATIONS DATA ==="
+            "Expected format markers: === POINTS DATA ===, === ORIENTATIONS DATA ===, === STRUCTURE DATA ==="
         )
         # Optionally print the raw response text for debugging
         # print("\n--- LLM Raw Response Text ---\n")
         # print(response_text)
         # print("\n--- End Raw Response Text ---\n")
-        return None, None
+        return None, None, None  # Return three Nones
 
-    return points_csv, orientations_csv
+    return points_csv, orientations_csv, structure_csv  # Return three values
 
 
-def save_generated_data(points_csv, orientations_csv, output_dir):
-    """Saves the generated points and orientations data to timestamped files."""
+def save_generated_data(points_csv, orientations_csv, structure_csv, output_dir):
+    """Saves the generated points, orientations, and structure data to timestamped files."""
     try:
         os.makedirs(output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         points_filename = os.path.join(output_dir, f"points_{timestamp}.csv")
         orientations_filename = os.path.join(
             output_dir, f"orientations_{timestamp}.csv"
+        )
+        structure_filename = os.path.join(  # Define structure filename
+            output_dir, f"structure_{timestamp}.csv"
         )
 
         with open(points_filename, "w") as f:
@@ -260,13 +298,21 @@ def save_generated_data(points_csv, orientations_csv, output_dir):
             f.write(orientations_csv)
         print(f"Saved generated orientations data to: {orientations_filename}")
 
-        return points_filename, orientations_filename
+        with open(structure_filename, "w") as f:  # Save structure file
+            f.write(structure_csv)
+        print(f"Saved generated structure data to: {structure_filename}")
+
+        return (
+            points_filename,
+            orientations_filename,
+            structure_filename,
+        )  # Return three filenames
     except OSError as e:
         print(f"Error creating directory or writing files: {e}")
-        return None, None
+        return None, None, None  # Return three Nones
     except Exception as e:
         print(f"An unexpected error occurred during saving: {e}")
-        return None, None
+        return None, None, None  # Return three Nones
 
 
 # --- End LLM Helper Functions ---
@@ -523,11 +569,11 @@ def compute_and_plot_model(geo_model: gp.data.GeoModel):
 
 
 def run_llm_generation(prompt_type: str, temperature: float, output_dir: str):
-    """Orchestrates the LLM data generation process."""
+    """Orchestrates the LLM data generation process, returning paths to points, orientations, and structure files."""
     client = initialize_llm()
     if not client:
         print("Exiting due to LLM initialization failure.")
-        return None, None
+        return None, None, None  # Return three Nones
 
     # Construct the prompt based on type
     prompt = get_llm_prompt(prompt_type)
@@ -535,30 +581,40 @@ def run_llm_generation(prompt_type: str, temperature: float, output_dir: str):
     llm_response = generate_data_with_llm(client, prompt, temperature)
     if not llm_response:
         print("Failed to get response from LLM. Exiting.")
-        return None, None
+        return None, None, None  # Return three Nones
 
-    points_csv, orientations_csv = parse_llm_response(llm_response)
-    if not points_csv or not orientations_csv:
+    points_csv, orientations_csv, structure_csv = parse_llm_response(llm_response)
+    if not points_csv or not orientations_csv or not structure_csv:
         print("Failed to parse LLM response. Exiting.")
-        return None, None
+        return None, None, None  # Return three Nones
 
     # --- Print generated data --- #
     print("\n--- Generated Points Data ---")
     print(points_csv)
     print("\n--- Generated Orientations Data ---")
     print(orientations_csv)
+    print("\n--- Generated Structure Data ---")
+    print(structure_csv)
     print("\n-----------------------------\n")
     # ---------------------------- #
 
-    generated_points_file, generated_orientations_file = save_generated_data(
-        points_csv, orientations_csv, output_dir
+    generated_points_file, generated_orientations_file, generated_structure_file = (
+        save_generated_data(points_csv, orientations_csv, structure_csv, output_dir)
     )
 
-    if not generated_points_file or not generated_orientations_file:
+    if (
+        not generated_points_file
+        or not generated_orientations_file
+        or not generated_structure_file
+    ):
         print("Failed to save generated data. Exiting.")
-        return None, None
+        return None, None, None  # Return three Nones
 
-    return generated_points_file, generated_orientations_file
+    return (
+        generated_points_file,
+        generated_orientations_file,
+        generated_structure_file,
+    )  # Return three filenames
 
 
 # --- End LLM Orchestration Function ---
@@ -637,31 +693,45 @@ def main():
             project_name, args.orientations_file, args.points_file
         )
     elif args.input_mode == "llm":
-        generated_points_file, generated_orientations_file = run_llm_generation(
-            args.prompt_type, args.temperature, args.llm_output_dir
+        generated_points_file, generated_orientations_file, generated_structure_file = (
+            run_llm_generation(args.prompt_type, args.temperature, args.llm_output_dir)
         )
 
-        if not generated_points_file or not generated_orientations_file:
+        if (
+            not generated_points_file
+            or not generated_orientations_file
+            or not generated_structure_file
+        ):
             print("LLM generation failed. Exiting.")
             return
 
-        # Use the newly generated files
+        # Use the newly generated files for model init
         geo_model = initialize_geomodel_from_files(
             project_name + "_LLM", generated_orientations_file, generated_points_file
         )
+        # Store the generated structure file path to be used later
+        structure_file_to_use = generated_structure_file
+    else:
+        # Should not happen due to choices constraint, but good practice
+        print(f"Error: Unknown input mode '{args.input_mode}'")
+        return
 
     if geo_model is None:
         print("Failed to initialize GeoModel.")
         return
 
+    # Determine which structure file to use (default/specified or LLM generated)
+    if args.input_mode != "llm":
+        structure_file_to_use = args.structural_defs_file
+    # (structure_file_to_use is already set in the 'llm' block above)
+
     # Define structural framework
-    # Ensure the surfaces/series defined in the (potentially modified) data exist
     try:
-        print(f"Loading structural definitions from: {args.structural_defs_file}")
-        structural_definitions = load_structural_definitions(args.structural_defs_file)
+        print(f"Loading structural definitions from: {structure_file_to_use}")
+        structural_definitions = load_structural_definitions(structure_file_to_use)
         if structural_definitions is None:
             print("Failed to load structural definitions. Exiting.")
-            return  # Exit if loading failed
+            return
 
         define_structural_groups(geo_model, structural_definitions)
     except KeyError as e:
