@@ -90,7 +90,7 @@ def main():
         "--prompt-type",
         type=str,
         default="default",
-        choices=["default", "random"],
+        choices=["default", "random", "DSL"],
         help="Prompt type for LLM-based GemPy input generation.",
     )
     gempy_group.add_argument(
@@ -102,7 +102,7 @@ def main():
     gempy_group.add_argument(
         "--retry-attempts",
         type=int,
-        default=5,
+        default=15,
         help="Retry attempts for LLM-based GemPy input generation.",
     )
 
@@ -130,7 +130,7 @@ def main():
     # --- Workflow Execution ---
     try:
         # --- Step 1: Text and Image Extraction ---
-        print("\n--- Step 1: Extracting Text and Images (Placeholder) ---")
+        print("\n--- Step 1: Extracting Text and Images ---")
         print(f"Input PDF: {args.input_pdf}")
         pdf_text = extract_text_from_pdf(args.input_pdf)  # Store extracted text
 
@@ -145,14 +145,14 @@ def main():
             )
             # Allow continuation, subsequent steps might fail gracefully if they need text
 
-        print("Running placeholder image extraction...")
+        print("Running image extraction...")
         extract_images_from_pdf(
             args.input_pdf, base_output_dir
         )  # Images go to base dir
         print("Step 1 finished.")
 
         # --- Step 2: Text Consolidation ---
-        print("\n--- Step 2: Consolidating Text ---")
+        print("\n--- Step 2: Consolidating Text and Images ---")
         if not pdf_text or not pdf_text.strip():
             print(
                 "Skipping text consolidation because no text was extracted or text is empty."
@@ -173,7 +173,7 @@ def main():
         print("Step 2 finished.")
 
         # --- Step 3: DSL Generation ---
-        print("\n--- Step 3: Generating DSL ---")
+        print("\n--- Step 3: Generating Geology DSL ---")
         if not consolidated_text or not consolidated_text.strip():
             print(
                 "Skipping DSL generation because consolidated text is missing or empty."
@@ -193,7 +193,7 @@ def main():
         print("Step 3 finished.")
 
         # --- Step 4: GemPy Modeling ---
-        print("\n--- Step 4: Running GemPy Modeling Workflow ---")
+        print("\n--- Step 4: Running Geology DSL to GemPy Modeling Workflow ---")
         # Pass the relevant arguments (parsed earlier) to the core workflow function
         gempy_success = run_core_gempy_workflow(args)
         if gempy_success:

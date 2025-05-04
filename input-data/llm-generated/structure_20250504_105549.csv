@@ -1,0 +1,5 @@
+group_index,group_name,elements,relation
+0,top_series,top_surface,ERODE
+1,middle_series,"upper_layer,lower_layer",ONLAP
+2,bottom_series,basement_layer,BASEMENT
+3,right_series,intrusive_dike,ERODE

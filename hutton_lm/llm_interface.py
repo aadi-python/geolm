@@ -8,6 +8,7 @@ from .data_loader import (
     DEFAULT_POINTS_DATA,
     DEFAULT_ORIENTATIONS_DATA,
     DEFAULT_STRUCTURE_DATA,
+    _WORKSPACE_ROOT,
 )
 
 # Attempt to import the Llama API client, handle import error gracefully
@@ -21,8 +22,34 @@ except ImportError:
 # --- LLM Helper Functions ---
 
 
-def get_llm_prompt(prompt_type: str) -> str:
+def get_llm_prompt(
+    prompt_type: str,
+    dsl_text_path: str | None = "extracted-data/bingham-canyon/geo-dsl-rev1.txt",
+) -> str:
     """Builds and returns the appropriate LLM prompt string based on the type."""
+
+    # --- Read DSL Text (if provided) ---
+    dsl_text = None
+    if dsl_text_path:
+        try:
+            # Construct absolute path if relative
+            full_dsl_path = dsl_text_path
+            if not os.path.isabs(dsl_text_path):
+                full_dsl_path = os.path.join(_WORKSPACE_ROOT, dsl_text_path)
+
+            with open(full_dsl_path, "r") as f:
+                dsl_text = f.read()
+            print(f"Successfully read DSL text from: {full_dsl_path}")
+            # NOTE: dsl_text is read but not yet used in the prompt generation below.
+        except FileNotFoundError:
+            print(
+                f"Warning: DSL file not found at '{dsl_text_path}'. Proceeding without DSL text."
+            )
+        except Exception as e:
+            print(
+                f"Warning: Error reading DSL file '{dsl_text_path}': {e}. Proceeding without DSL text."
+            )
+    # ------------------------------------
 
     prompt_intro = "You are a helpful assistant for geological modeling. Please generate three completely new CSV datasets suitable for GemPy: surface points, orientations, and structural group definitions."
     prompt_format_suffix = """Ensure the output format is exactly CSV, with the correct columns as shown in the reference/examples.
@@ -69,11 +96,58 @@ Structure Data Format Reference (DO NOT COPY VALUES):
 {DEFAULT_STRUCTURE_DATA.strip()}
 ```"""
 
+    elif prompt_type == "DSL":
+        if dsl_text:
+            dsl_explanation = """
+The provided DSL describes geological entities and events:
+- ROCK: Defines rock units with type and optional age.
+- DEPOSITION: Represents sedimentary or volcanic rock formation, potentially ordered (`after`).
+- EROSION: Represents an erosional event, potentially ordered (`after`).
+- INTRUSION: Represents magma emplacement (dike, sill, etc.), potentially ordered (`after`).
+`after:` clauses define relative timing constraints. Ages provide absolute timing where available."""
+
+            prompt_task = f"""Please generate three CSV datasets for GemPy (surface points, orientations, structural definitions) that are consistent with the geological history described in the following DSL:
+
+```dsl
+{dsl_text.strip()}
+```
+
+{dsl_explanation}
+
+Your task is to translate this DSL description into plausible GemPy input data:
+1.  **Points:** Create X, Y, Z coordinates for surfaces representing the boundaries between the defined ROCK units. Ensure the spatial arrangement reflects the depositional, erosional, and intrusive relationships and timing (`after:` clauses, `age`/`time`).
+2.  **Orientations:** Define dip and azimuth values for relevant surfaces. These should be consistent with the geological structure implied by the DSL (e.g., layers deposited flat initially, tilted/folded later, cut by intrusions).
+3.  **Structure:** Define the stratigraphic relationships (series/groups) using the GemPy relations (ERODE, ONLAP, BASEMENT) consistent with the DSL's DEPOSITION, EROSION, and INTRUSION events and their `after:` constraints. The surface names in the structure data must match the `surface` column in the points data, which should correspond to the ROCK units defined in the DSL.
+
+Use the format reference below, but generate *new* data based *only* on the provided DSL."""
+            prompt_examples = f"""Points Data Format Reference (DO NOT COPY VALUES):
+```csv
+{DEFAULT_POINTS_DATA.strip()}
+```
+
+Orientations Data Format Reference (DO NOT COPY VALUES):
+```csv
+{DEFAULT_ORIENTATIONS_DATA.strip()}
+```
+
+Structure Data Format Reference (DO NOT COPY VALUES):
+```csv
+{DEFAULT_STRUCTURE_DATA.strip()}
+```"""
+        else:
+            print(
+                "Warning: 'DSL' prompt type selected, but no DSL text was successfully read. Falling back to 'default' prompt type."
+            )
+            # Fallback to default if DSL text isn't available
+            return get_llm_prompt(
+                "default", dsl_text_path=None
+            )  # Pass None to avoid re-reading attempt
+
     else:
         print(
             f"Warning: Unknown prompt type '{prompt_type}'. Falling back to default prompt."
         )
-        return get_llm_prompt("default")  # Recursive call with default
+        return get_llm_prompt("default", dsl_text_path=None)  # Pass None here too
 
     # Combine the sections
     full_prompt = f"""{prompt_intro}
