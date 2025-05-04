@@ -1,4 +1,6 @@
 import argparse
+import os
+import sys
 import numpy as np
 import traceback
 
@@ -16,6 +18,46 @@ from .model_builder import (
     define_structural_groups,
     compute_and_plot_model,
 )
+from .pdf_parser import extract_text_from_pdf
+
+# Ensure the package directory is in the Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+
+def parse_pdf_command(args):
+    """Handles the parse-pdf command."""
+    pdf_text = extract_text_from_pdf(args.input_pdf)
+    if pdf_text:
+        output_dir = args.output_dir
+        os.makedirs(output_dir, exist_ok=True)
+        output_file_path = os.path.join(output_dir, "extracted_text.txt")
+        try:
+            with open(output_file_path, "w", encoding="utf-8") as f:
+                f.write(pdf_text)
+            print(f"Successfully extracted text to {output_file_path}")
+        except IOError as e:
+            print(f"Error writing to file {output_file_path}: {e}")
+
+    else:
+        print(f"Failed to extract text from {args.input_pdf}")
+        sys.exit(1)  # Indicate failure
+
+
+def run_model_command(args):
+    """Handles the run-model command."""
+    print(f"Running model: {args.model_name}")
+    print(f"Input data path: {args.input_data}")
+    print(f"Output directory: {args.output_dir}")
+
+    # Example usage (replace with actual logic)
+    # loader = DataLoader(args.input_data)
+    # data = loader.load()
+    # builder = ModelBuilder(args.model_name)
+    # model = builder.build()
+    # results = model.run(data)
+    # builder.save_output(results, args.output_dir)
+    print("Model run simulation complete.")
 
 
 def main():
@@ -75,7 +117,56 @@ def main():
         help="Number of times to retry LLM generation and model building if an error occurs (used if --input-mode=llm).",
     )
 
+    subparsers = parser.add_subparsers(
+        dest="command", help="Available commands", required=True
+    )
+
+    # --- Run Model Subcommand ---
+    parser_run = subparsers.add_parser(
+        "run-model", help="Run a specific geological model."
+    )
+    parser_run.add_argument(
+        "--model-name",
+        type=str,
+        required=True,
+        help="Name of the model to run (e.g., 'basin_model').",
+    )
+    parser_run.add_argument(
+        "--input-data",
+        type=str,
+        required=True,
+        help="Path to the input data file or directory.",
+    )
+    parser_run.add_argument(
+        "--output-dir",
+        type=str,
+        default="output",
+        help="Directory to save the model output.",
+    )
+    parser_run.set_defaults(func=run_model_command)
+
+    # --- New PDF Parser Subcommand ---
+    parser_parse_pdf = subparsers.add_parser(
+        "parse-pdf", help="Extract text from a PDF document."
+    )
+    parser_parse_pdf.add_argument(
+        "--input-pdf",
+        type=str,
+        default="assets/The_Bingham_Canyon_Porphyry_Cu_Mo_Au_Dep.pdf",
+        help="Path to the input PDF file.",
+    )
+    parser_parse_pdf.add_argument(
+        "--output-dir",
+        type=str,
+        default="extracted-data/bingham-canyon",
+        help="Directory to save the extracted text file.",
+    )
+    parser_parse_pdf.set_defaults(func=parse_pdf_command)
+
     args = parser.parse_args()
+
+    # Execute the function associated with the chosen subcommand
+    args.func(args)
 
     print(f"Running Hutton LM Generator in '{args.input_mode}' mode.")
 
