@@ -1,4 +1,4 @@
-# hutton-lm
+# geo-lm
 
 A prototype language model interface for generating geological models\!
 
