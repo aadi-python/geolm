@@ -60,3 +60,17 @@ def extract_text_from_pdf(file_path: str, max_chars: int = -1) -> Optional[str]:
     except Exception as e:
         print(f"An unexpected error occurred: {str(e)}")
         return None
+
+
+def extract_images_from_pdf(file_path: str, output_dir: str) -> None:
+    """
+    Placeholder function to extract images from a PDF.
+    Currently does nothing but print a message.
+    """
+    if not validate_pdf(file_path):
+        return None
+
+    print(f"TODO: Implement image extraction from {file_path} into {output_dir}")
+    # Placeholder: In a real implementation, this would extract images
+    # and save them to the output_dir, potentially returning a list of image paths.
+    return None

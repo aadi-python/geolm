@@ -18,7 +18,7 @@ from .model_builder import (
     define_structural_groups,
     compute_and_plot_model,
 )
-from .pdf_parser import extract_text_from_pdf
+from .pdf_parser import extract_text_from_pdf, extract_images_from_pdf
 
 # Ensure the package directory is in the Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,10 +27,11 @@ sys.path.insert(0, project_root)
 
 def parse_pdf_command(args):
     """Handles the parse-pdf command."""
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
     pdf_text = extract_text_from_pdf(args.input_pdf)
     if pdf_text:
-        output_dir = args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
         output_file_path = os.path.join(output_dir, "extracted_text.txt")
         try:
             with open(output_file_path, "w", encoding="utf-8") as f:
@@ -42,6 +43,10 @@ def parse_pdf_command(args):
     else:
         print(f"Failed to extract text from {args.input_pdf}")
         sys.exit(1)  # Indicate failure
+
+    # Call the placeholder image extraction function
+    print("\nAttempting placeholder image extraction...")
+    extract_images_from_pdf(args.input_pdf, output_dir)
 
 
 def run_model_command(args):
