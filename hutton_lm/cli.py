@@ -9,12 +9,14 @@ from .data_loader import (
     DEFAULT_POINTS_FILE,
     DEFAULT_ORIENTATIONS_FILE,
     DEFAULT_STRUCTURE_FILE,
+    read_file_content,  # May need this if used implicitly before
 )
 from .llm_interface import (
     run_llm_generation,
     llm_consolidate_parsed_text,
     llm_generate_dsl_summary,
 )
+from .pdf_parser import extract_text_from_pdf, extract_images_from_pdf
 from .model_builder import (
     initialize_geomodel_with_tmp_files,
     initialize_geomodel_from_files,
@@ -22,7 +24,6 @@ from .model_builder import (
     define_structural_groups,
     compute_and_plot_model,
 )
-from .pdf_parser import extract_text_from_pdf, extract_images_from_pdf
 
 # Ensure the package directory is in the Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,13 +44,14 @@ def parse_pdf_command(args):
             print(f"Successfully extracted text to {output_file_path}")
         except IOError as e:
             print(f"Error writing to file {output_file_path}: {e}")
+            # Don't exit yet, attempt image extraction
 
     else:
         print(f"Failed to extract text from {args.input_pdf}")
-        sys.exit(1)  # Indicate failure
+        # Don't exit yet, attempt image extraction
 
     # Call the placeholder image extraction function
-    print("\nAttempting image extraction...")
+    print("\nAttempting placeholder image extraction...")
     extract_images_from_pdf(args.input_pdf, output_dir)
 
 
@@ -58,14 +60,6 @@ def run_model_command(args):
     print(f"Running model: {args.model_name}")
     print(f"Input data path: {args.input_data}")
     print(f"Output directory: {args.output_dir}")
-
-    # Example usage (replace with actual logic)
-    # loader = DataLoader(args.input_data)
-    # data = loader.load()
-    # builder = ModelBuilder(args.model_name)
-    # model = builder.build()
-    # results = model.run(data)
-    # builder.save_output(results, args.output_dir)
     print("Model run simulation complete.")
 
 
@@ -139,18 +133,162 @@ def generate_dsl_command(args):
         sys.exit(1)
 
 
+def run_core_gempy_workflow(args):
+    """Runs the main GemPy model generation workflow based on parsed args."""
+    print(f"Running Hutton LM Generator in '{args.input_mode}' mode (core workflow).")
+
+    geo_model = None
+    project_name = "Hutton_LM_Model"  # Consider making this an arg?
+    structure_file_to_use = args.structural_defs_file  # Default unless LLM mode
+
+    if args.input_mode == "default":
+        print("Initializing model using default data...")
+        geo_model = initialize_geomodel_with_tmp_files(project_name)
+    elif args.input_mode == "file":
+        print("Initializing model using files:")
+        print(f"  Orientations: {args.orientations_file}")
+        print(f"  Points: {args.points_file}")
+        geo_model = initialize_geomodel_from_files(
+            project_name, args.orientations_file, args.points_file
+        )
+    elif args.input_mode == "llm":
+        success = False
+        # --- Retry Loop --- #
+        for attempt in range(args.retry_attempts):
+            print(
+                f"\n--- LLM Generation Attempt {attempt + 1} of {args.retry_attempts} ---"
+            )
+            geo_model = None  # Reset geo_model for each attempt
+            try:
+                print("Running LLM generation...")
+                generated_files = run_llm_generation(
+                    args.prompt_type, args.temperature, args.llm_output_dir
+                )
+                if not generated_files:
+                    raise RuntimeError("LLM generation step failed to produce files.")
+                gen_points_file, gen_orientations_file, gen_structure_file = (
+                    generated_files
+                )
+
+                print("Initializing model using LLM generated files...")
+                geo_model = initialize_geomodel_from_files(
+                    project_name
+                    + f"_LLM_Attempt_{attempt + 1}",  # Unique project name per attempt
+                    gen_orientations_file,
+                    gen_points_file,
+                )
+                if geo_model is None:
+                    raise RuntimeError(
+                        "Failed to initialize GeoModel from generated files."
+                    )
+
+                # Use the generated structure file for this attempt
+                structure_file_to_use = gen_structure_file
+
+                print(
+                    f"Loading structural definitions from generated file: {structure_file_to_use}"
+                )
+                structural_definitions = load_structural_definitions(
+                    structure_file_to_use
+                )
+                if structural_definitions is None:
+                    raise RuntimeError(
+                        "Failed to load generated structural definitions."
+                    )
+
+                print("Defining structural groups from generated definitions...")
+                define_structural_groups(geo_model, structural_definitions)
+
+                print("Computing and plotting model...")
+                compute_and_plot_model(geo_model)
+
+                # If all steps succeed:
+                print(f"--- Attempt {attempt + 1} successful! --- \n")
+                success = True
+                break  # Exit the retry loop on success
+
+            except Exception as e:
+                print(f"--- Attempt {attempt + 1} failed: {e} --- \n")
+                # traceback.print_exc() # Optional for debugging
+                if attempt < args.retry_attempts - 1:
+                    print("Retrying...")
+
+        # --- End Retry Loop --- #
+
+        if not success:
+            print(
+                f"LLM generation and model building failed after {args.retry_attempts} attempts. Exiting workflow."
+            )
+            # Decide whether to sys.exit(1) here or just return failure
+            return False  # Indicate failure to caller
+
+    else:
+        # This case should be unreachable due to argparse choices in main()
+        print(f"Internal Error: Invalid input mode '{args.input_mode}'.")
+        return False  # Indicate failure
+
+    # --- Steps for non-LLM modes (or if LLM loop finished successfully) ---
+    # If LLM was successful, plotting already happened. If not LLM, need to plot.
+    if args.input_mode != "llm":
+        if geo_model is None:
+            print("Failed to initialize GeoModel. Exiting workflow.")
+            return False  # Indicate failure
+
+        # Define structural framework using the specified or default structure file
+        try:
+            print(f"Loading structural definitions from: {structure_file_to_use}")
+            structural_definitions = load_structural_definitions(structure_file_to_use)
+            if structural_definitions is None:
+                print("Failed to load structural definitions. Exiting workflow.")
+                return False  # Indicate failure
+
+            define_structural_groups(geo_model, structural_definitions)
+
+        except KeyError as e:
+            print(f"\nError defining structural groups: Key '{e}' not found.")
+            print(
+                "Check structural definitions CSV against points/orientations data names."
+            )
+            print(f"  Structure file: {structure_file_to_use}")
+            if geo_model and hasattr(geo_model, "structural_frame"):
+                print(
+                    f"  Available elements: {list(geo_model.structural_frame.structural_elements.keys())}"
+                )
+            return False  # Indicate failure
+        except ValueError as e:
+            print(f"\nError during structural group definition: {e}")
+            return False  # Indicate failure
+        except Exception as e:
+            print(f"\nAn unexpected error occurred defining structural groups: {e}")
+            traceback.print_exc()
+            return False  # Indicate failure
+
+        # Compute and plot for non-LLM modes
+        try:
+            print("Computing and plotting model (non-LLM mode)...")
+            compute_and_plot_model(geo_model)
+        except Exception as e:
+            print(f"\nAn error occurred during model computation or plotting: {e}")
+            traceback.print_exc()
+            return False  # Indicate failure
+
+    print("Hutton LM core workflow finished successfully.")
+    return True  # Indicate success
+
+
 def main():
     """Main execution function: parses arguments, loads/generates data, builds model, plots."""
 
     parser = argparse.ArgumentParser(
-        description="Generate 3D geological model using GemPy (Hutton LM Package)."
+        description="Hutton LM CLI tool for geological modeling and PDF processing."
     )
+    # Arguments relevant to the core GemPy workflow (used when no command is given)
     parser.add_argument(
         "--input-mode",
         type=str,
         choices=["default", "file", "llm"],
         default="default",
-        help="Input data source: 'default', 'file' (requires --points-file, --orientations-file), or 'llm' (generates data).",
+        help="Input data source for GemPy modeling: 'default', 'file' (requires points/orientations), or 'llm'.",
     )
     parser.add_argument(
         "--orientations-file",
@@ -167,14 +305,14 @@ def main():
     parser.add_argument(
         "--llm-output-dir",
         type=str,
-        default="input-data/llm-generated",  # Relative to workspace root by default
+        default="input-data/llm-generated",
         help="Directory to save LLM-generated input files (used if --input-mode=llm).",
     )
     parser.add_argument(
         "--structural-defs-file",
         type=str,
         default=DEFAULT_STRUCTURE_FILE,
-        help="Path to the structural definitions CSV file (used if --input-mode=file or default).",
+        help="Path to the structural definitions CSV file (used if --input-mode=file or default, or as fallback for LLM).",
     )
     parser.add_argument(
         "--prompt-type",
@@ -193,7 +331,7 @@ def main():
         "--retry-attempts",
         type=int,
         default=5,
-        help="Number of times to retry LLM generation and model building if an error occurs (used if --input-mode=llm).",
+        help="Number of times to retry LLM generation/model building if an error occurs (--input-mode=llm).",
     )
 
     subparsers = parser.add_subparsers(
@@ -202,49 +340,42 @@ def main():
         required=False,
     )
 
-    # --- Run Model Subcommand ---
+    # --- Run Model Subcommand --- (Keep for potential direct use?)
+    # Or remove if run_core_gempy_workflow is now the primary way? Let's keep it for now.
     parser_run = subparsers.add_parser(
-        "run-model", help="Run a specific geological model."
+        "run-model",
+        help="Run a specific geological model (Simulation). Use --input-mode for actual generation.",
     )
     parser_run.add_argument(
-        "--model-name",
-        type=str,
-        required=True,
-        help="Name of the model to run (e.g., 'basin_model').",
+        "--model-name", type=str, required=True, help="Name of the model to run."
     )
     parser_run.add_argument(
-        "--input-data",
-        type=str,
-        required=True,
-        help="Path to the input data file or directory.",
+        "--input-data", type=str, required=True, help="Path to input data."
     )
     parser_run.add_argument(
-        "--output-dir",
-        type=str,
-        default="output",
-        help="Directory to save the model output.",
+        "--output-dir", type=str, default="output", help="Directory for output."
     )
     parser_run.set_defaults(func=run_model_command)
 
-    # --- New PDF Parser Subcommand ---
+    # --- PDF Parser Subcommand ---
     parser_parse_pdf = subparsers.add_parser(
-        "parse-pdf", help="Extract text from a PDF document."
+        "parse-pdf", help="Extract text and images (placeholder) from a PDF document."
     )
     parser_parse_pdf.add_argument(
         "--input-pdf",
         type=str,
         default="assets/The_Bingham_Canyon_Porphyry_Cu_Mo_Au_Dep.pdf",
-        help="Path to the input PDF file.",
+        help="Input PDF path.",
     )
     parser_parse_pdf.add_argument(
         "--output-dir",
         type=str,
         default="extracted-data/bingham-canyon",
-        help="Directory to save the extracted text file.",
+        help="Output directory for extracted files.",
     )
     parser_parse_pdf.set_defaults(func=parse_pdf_command)
 
-    # --- New Text Consolidation Subcommand ---
+    # --- Text Consolidation Subcommand ---
     parser_consolidate = subparsers.add_parser(
         "consolidate-text", help="Consolidate extracted text using an LLM."
     )
@@ -252,17 +383,17 @@ def main():
         "--input-file",
         type=str,
         default="extracted-data/bingham-canyon/extracted_text.txt",
-        help="Path to the input text file (output of parse-pdf).",
+        help="Input text file path.",
     )
     parser_consolidate.add_argument(
         "--output-file",
         type=str,
         default="extracted-data/bingham-canyon/consolidated-text-rev01.txt",
-        help="Path to save the consolidated text output file.",
+        help="Output consolidated text file path.",
     )
     parser_consolidate.set_defaults(func=consolidate_text_command)
 
-    # --- New DSL Generation Subcommand ---
+    # --- DSL Generation Subcommand ---
     parser_dsl = subparsers.add_parser(
         "generate-dsl",
         help="Generate geological DSL from consolidated text using an LLM.",
@@ -271,13 +402,13 @@ def main():
         "--input-file",
         type=str,
         default="extracted-data/bingham-canyon/consolidated-text-rev01.txt",
-        help="Path to the input consolidated text file.",
+        help="Input consolidated text file path.",
     )
     parser_dsl.add_argument(
         "--output-file",
         type=str,
         default="extracted-data/bingham-canyon/geo-dsl-rev1.txt",
-        help="Path to save the generated DSL output file.",
+        help="Output DSL file path.",
     )
     parser_dsl.set_defaults(func=generate_dsl_command)
 
@@ -288,161 +419,16 @@ def main():
         # Execute the function associated with the chosen subcommand
         args.func(args)
         # Exit after running the specific command
-        sys.exit(0)  # Use sys.exit(0) for clean exit
+        sys.exit(0)
     else:
-        # --- Original GemPy Generation Logic (if no subcommand is provided) --- #
-        print(
-            f"Running Hutton LM Generator in '{args.input_mode}' mode (no specific command given)."
-        )
-
-        geo_model = None
-        project_name = "Hutton_LM_Model"
-        structure_file_to_use = args.structural_defs_file  # Default unless LLM mode
-
-        if args.input_mode == "default":
-            print("Initializing model using default data...")
-            geo_model = initialize_geomodel_with_tmp_files(project_name)
-        elif args.input_mode == "file":
-            print("Initializing model using files:")
-            print(f"  Orientations: {args.orientations_file}")
-            print(f"  Points: {args.points_file}")
-            geo_model = initialize_geomodel_from_files(
-                project_name, args.orientations_file, args.points_file
-            )
-        elif args.input_mode == "llm":
-            success = False
-            # --- Retry Loop --- #
-            for attempt in range(args.retry_attempts):
-                print(
-                    f"\n--- LLM Generation Attempt {attempt + 1} of {args.retry_attempts} ---"
-                )
-                geo_model = None  # Reset geo_model for each attempt
-                try:
-                    print("Running LLM generation...")
-                    generated_files = run_llm_generation(
-                        args.prompt_type, args.temperature, args.llm_output_dir
-                    )
-                    if not generated_files:
-                        raise RuntimeError(
-                            "LLM generation step failed to produce files."
-                        )
-                    gen_points_file, gen_orientations_file, gen_structure_file = (
-                        generated_files
-                    )
-
-                    print("Initializing model using LLM generated files...")
-                    geo_model = initialize_geomodel_from_files(
-                        project_name
-                        + f"_LLM_Attempt_{attempt + 1}",  # Unique project name per attempt
-                        gen_orientations_file,
-                        gen_points_file,
-                    )
-                    if geo_model is None:
-                        raise RuntimeError(
-                            "Failed to initialize GeoModel from generated files."
-                        )
-
-                    # Use the generated structure file for this attempt
-                    structure_file_to_use = gen_structure_file
-
-                    print(
-                        f"Loading structural definitions from generated file: {structure_file_to_use}"
-                    )
-                    structural_definitions = load_structural_definitions(
-                        structure_file_to_use
-                    )
-                    if structural_definitions is None:
-                        raise RuntimeError(
-                            "Failed to load generated structural definitions."
-                        )
-
-                    print("Defining structural groups from generated definitions...")
-                    define_structural_groups(geo_model, structural_definitions)
-
-                    print("Computing and plotting model...")
-                    compute_and_plot_model(geo_model)
-
-                    # If all steps succeed:
-                    print(f"--- Attempt {attempt + 1} successful! --- \n")
-                    success = True
-                    break  # Exit the retry loop on success
-
-                except Exception as e:
-                    print(f"--- Attempt {attempt + 1} failed: {e} --- \n")
-                    # Optional: Log detailed traceback for debugging
-                    # traceback.print_exc()
-
-                    if attempt < args.retry_attempts - 1:
-                        print("Retrying...")
-
-            # --- End Retry Loop --- #
-
-            if not success:
-                print(
-                    f"LLM generation and model building failed after {args.retry_attempts} attempts. Exiting."
-                )
-                sys.exit(1)  # Exit with error code
-
-        else:
-            # This case should be unreachable due to argparse choices
-            print(f"Internal Error: Invalid input mode '{args.input_mode}'.")
-            sys.exit(1)
-
-        # If input mode was NOT 'llm' (and model exists), proceed with defining groups and plotting
-        # For LLM mode, plotting already happened in the loop.
-        if args.input_mode != "llm":
-            if geo_model is None:
-                print("Failed to initialize GeoModel. Exiting.")
-                sys.exit(1)
-
-            # Define structural framework using the specified or default structure file
-            try:
-                print(f"Loading structural definitions from: {structure_file_to_use}")
-                structural_definitions = load_structural_definitions(
-                    structure_file_to_use
-                )
-                if structural_definitions is None:
-                    print("Failed to load structural definitions. Exiting.")
-                    sys.exit(1)
-
-                define_structural_groups(geo_model, structural_definitions)
-
-            except KeyError as e:
-                print(f"\nError defining structural groups: Key '{e}' not found.")
-                print(
-                    "This often means a surface/series name in the structural definitions CSV"
-                )
-                print(
-                    "does not match the names provided in the points/orientations data."
-                )
-                print(
-                    f"  Check names in: {structure_file_to_use} against points/orientations data."
-                )
-                if geo_model and hasattr(geo_model, "structural_frame"):
-                    print(
-                        f"  Available elements parsed from input: {list(geo_model.structural_frame.structural_elements.keys())}"
-                    )
-                sys.exit(1)
-            except ValueError as e:
-                print(f"\nError during structural group definition: {e}")
-                sys.exit(1)
-            except Exception as e:
-                print(f"\nAn unexpected error occurred defining structural groups: {e}")
-                traceback.print_exc()
-                sys.exit(1)
-
-            # Compute and plot for non-LLM modes
-            try:
-                compute_and_plot_model(geo_model)
-            except Exception as e:
-                print(f"\nAn error occurred during model computation or plotting: {e}")
-                traceback.print_exc()
-                sys.exit(1)
-
-        print("Hutton LM script finished successfully.")
+        # --- Run Core GemPy Workflow (if no subcommand is provided) --- #
+        success = run_core_gempy_workflow(args)
+        if not success:
+            print("Core GemPy workflow failed.")
+            sys.exit(1)  # Exit with error code if workflow fails
 
 
 if __name__ == "__main__":
-    # Set seed for reproducibility if the script is run directly
+    # Set seed for reproducibility if the package is run via cli module
     np.random.seed(1515)
     main()
