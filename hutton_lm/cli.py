@@ -197,7 +197,9 @@ def main():
     )
 
     subparsers = parser.add_subparsers(
-        dest="command", help="Available commands", required=True
+        dest="command",
+        help="Available commands (optional, runs GemPy generation if omitted)",
+        required=False,
     )
 
     # --- Run Model Subcommand ---
@@ -281,162 +283,163 @@ def main():
 
     args = parser.parse_args()
 
-    # Execute the function associated with the chosen subcommand
-    args.func(args)
-
-    print(f"Running Hutton LM Generator in '{args.input_mode}' mode.")
-
-    geo_model = None
-    project_name = "Hutton_LM_Model"
-    structure_file_to_use = args.structural_defs_file  # Default unless LLM mode
-
-    if args.input_mode == "default":
-        print("Initializing model using default data...")
-        geo_model = initialize_geomodel_with_tmp_files(project_name)
-    elif args.input_mode == "file":
-        print("Initializing model using files:")
-        print(f"  Orientations: {args.orientations_file}")
-        print(f"  Points: {args.points_file}")
-        # File existence is checked implicitly by initialize_geomodel_from_files via read_file_content
-        # or directly by gempy. We rely on that check.
-        geo_model = initialize_geomodel_from_files(
-            project_name, args.orientations_file, args.points_file
+    # --- Command Execution --- #
+    if args.command:
+        # Execute the function associated with the chosen subcommand
+        args.func(args)
+        # Exit after running the specific command
+        sys.exit(0)  # Use sys.exit(0) for clean exit
+    else:
+        # --- Original GemPy Generation Logic (if no subcommand is provided) --- #
+        print(
+            f"Running Hutton LM Generator in '{args.input_mode}' mode (no specific command given)."
         )
-    elif args.input_mode == "llm":
-        success = False
-        # --- Retry Loop --- #
-        for attempt in range(args.retry_attempts):
-            print(
-                f"\n--- LLM Generation Attempt {attempt + 1} of {args.retry_attempts} ---"
-            )
-            geo_model = None  # Reset geo_model for each attempt
-            try:
-                print("Running LLM generation...")
-                generated_files = run_llm_generation(
-                    args.prompt_type, args.temperature, args.llm_output_dir
-                )
-                if not generated_files:
-                    raise RuntimeError("LLM generation step failed to produce files.")
-                gen_points_file, gen_orientations_file, gen_structure_file = (
-                    generated_files
-                )
 
-                print("Initializing model using LLM generated files...")
-                geo_model = initialize_geomodel_from_files(
-                    project_name
-                    + f"_LLM_Attempt_{attempt + 1}",  # Unique project name per attempt
-                    gen_orientations_file,
-                    gen_points_file,
+        geo_model = None
+        project_name = "Hutton_LM_Model"
+        structure_file_to_use = args.structural_defs_file  # Default unless LLM mode
+
+        if args.input_mode == "default":
+            print("Initializing model using default data...")
+            geo_model = initialize_geomodel_with_tmp_files(project_name)
+        elif args.input_mode == "file":
+            print("Initializing model using files:")
+            print(f"  Orientations: {args.orientations_file}")
+            print(f"  Points: {args.points_file}")
+            geo_model = initialize_geomodel_from_files(
+                project_name, args.orientations_file, args.points_file
+            )
+        elif args.input_mode == "llm":
+            success = False
+            # --- Retry Loop --- #
+            for attempt in range(args.retry_attempts):
+                print(
+                    f"\n--- LLM Generation Attempt {attempt + 1} of {args.retry_attempts} ---"
                 )
-                if geo_model is None:
-                    raise RuntimeError(
-                        "Failed to initialize GeoModel from generated files."
+                geo_model = None  # Reset geo_model for each attempt
+                try:
+                    print("Running LLM generation...")
+                    generated_files = run_llm_generation(
+                        args.prompt_type, args.temperature, args.llm_output_dir
+                    )
+                    if not generated_files:
+                        raise RuntimeError(
+                            "LLM generation step failed to produce files."
+                        )
+                    gen_points_file, gen_orientations_file, gen_structure_file = (
+                        generated_files
                     )
 
-                # Use the generated structure file for this attempt
-                structure_file_to_use = gen_structure_file
+                    print("Initializing model using LLM generated files...")
+                    geo_model = initialize_geomodel_from_files(
+                        project_name
+                        + f"_LLM_Attempt_{attempt + 1}",  # Unique project name per attempt
+                        gen_orientations_file,
+                        gen_points_file,
+                    )
+                    if geo_model is None:
+                        raise RuntimeError(
+                            "Failed to initialize GeoModel from generated files."
+                        )
 
+                    # Use the generated structure file for this attempt
+                    structure_file_to_use = gen_structure_file
+
+                    print(
+                        f"Loading structural definitions from generated file: {structure_file_to_use}"
+                    )
+                    structural_definitions = load_structural_definitions(
+                        structure_file_to_use
+                    )
+                    if structural_definitions is None:
+                        raise RuntimeError(
+                            "Failed to load generated structural definitions."
+                        )
+
+                    print("Defining structural groups from generated definitions...")
+                    define_structural_groups(geo_model, structural_definitions)
+
+                    print("Computing and plotting model...")
+                    compute_and_plot_model(geo_model)
+
+                    # If all steps succeed:
+                    print(f"--- Attempt {attempt + 1} successful! --- \n")
+                    success = True
+                    break  # Exit the retry loop on success
+
+                except Exception as e:
+                    print(f"--- Attempt {attempt + 1} failed: {e} --- \n")
+                    # Optional: Log detailed traceback for debugging
+                    # traceback.print_exc()
+
+                    if attempt < args.retry_attempts - 1:
+                        print("Retrying...")
+
+            # --- End Retry Loop --- #
+
+            if not success:
                 print(
-                    f"Loading structural definitions from generated file: {structure_file_to_use}"
+                    f"LLM generation and model building failed after {args.retry_attempts} attempts. Exiting."
                 )
+                sys.exit(1)  # Exit with error code
+
+        else:
+            # This case should be unreachable due to argparse choices
+            print(f"Internal Error: Invalid input mode '{args.input_mode}'.")
+            sys.exit(1)
+
+        # If input mode was NOT 'llm' (and model exists), proceed with defining groups and plotting
+        # For LLM mode, plotting already happened in the loop.
+        if args.input_mode != "llm":
+            if geo_model is None:
+                print("Failed to initialize GeoModel. Exiting.")
+                sys.exit(1)
+
+            # Define structural framework using the specified or default structure file
+            try:
+                print(f"Loading structural definitions from: {structure_file_to_use}")
                 structural_definitions = load_structural_definitions(
                     structure_file_to_use
                 )
                 if structural_definitions is None:
-                    raise RuntimeError(
-                        "Failed to load generated structural definitions."
-                    )
+                    print("Failed to load structural definitions. Exiting.")
+                    sys.exit(1)
 
-                print("Defining structural groups from generated definitions...")
                 define_structural_groups(geo_model, structural_definitions)
 
-                print("Computing and plotting model...")
-                compute_and_plot_model(geo_model)
-
-                # If all steps succeed:
-                print(f"--- Attempt {attempt + 1} successful! --- \n")
-                success = True
-                break  # Exit the retry loop on success
-
-            except Exception as e:
-                print(f"--- Attempt {attempt + 1} failed: {e} --- \n")
-                # Optional: Log detailed traceback for debugging
-                # traceback.print_exc()
-
-                if attempt < args.retry_attempts - 1:
-                    print("Retrying...")
-                    # Optional: time.sleep(1)
-                # Loop continues to the next attempt
-
-        # --- End Retry Loop --- #
-
-        if not success:
-            print(
-                f"LLM generation and model building failed after {args.retry_attempts} attempts. Exiting."
-            )
-            return  # Exit main if all retries failed
-
-        # If loop succeeded, structure_file_to_use is already set correctly
-        # for the successful attempt, and geo_model is the successfully built model.
-        # The main flow can continue, but the successful parts (define, compute, plot)
-        # have already run inside the loop. We might want to prevent them running again.
-
-        # To prevent re-running post-loop, we can structure it so the post-loop code
-        # is only for non-LLM modes or only runs if the loop didn't succeed (which it shouldn't reach here).
-        # Let's adjust: The successful LLM run completes everything including plotting.
-
-    else:
-        # This case should be unreachable due to argparse choices
-        print(f"Internal Error: Invalid input mode '{args.input_mode}'.")
-        return
-
-    # If input mode was NOT 'llm', proceed with defining groups and plotting
-    if args.input_mode != "llm":
-        if geo_model is None:
-            print("Failed to initialize GeoModel. Exiting.")
-            return
-
-        # Define structural framework using the specified or default structure file
-        try:
-            print(f"Loading structural definitions from: {structure_file_to_use}")
-            structural_definitions = load_structural_definitions(structure_file_to_use)
-            if structural_definitions is None:
-                print("Failed to load structural definitions. Exiting.")
-                return
-
-            define_structural_groups(geo_model, structural_definitions)
-
-        except KeyError as e:
-            print(f"\nError defining structural groups: Key '{e}' not found.")
-            print(
-                "This often means a surface/series name in the structural definitions CSV"
-            )
-            print("does not match the names provided in the points/orientations data.")
-            print(
-                f"  Check names in: {structure_file_to_use} against points/orientations data."
-            )
-            if geo_model and hasattr(geo_model, "structural_frame"):
+            except KeyError as e:
+                print(f"\nError defining structural groups: Key '{e}' not found.")
                 print(
-                    f"  Available elements parsed from input: {list(geo_model.structural_frame.structural_elements.keys())}"
+                    "This often means a surface/series name in the structural definitions CSV"
                 )
-            return
-        except ValueError as e:
-            print(f"\nError during structural group definition: {e}")
-            return
-        except Exception as e:
-            print(f"\nAn unexpected error occurred defining structural groups: {e}")
-            traceback.print_exc()
-            return
+                print(
+                    "does not match the names provided in the points/orientations data."
+                )
+                print(
+                    f"  Check names in: {structure_file_to_use} against points/orientations data."
+                )
+                if geo_model and hasattr(geo_model, "structural_frame"):
+                    print(
+                        f"  Available elements parsed from input: {list(geo_model.structural_frame.structural_elements.keys())}"
+                    )
+                sys.exit(1)
+            except ValueError as e:
+                print(f"\nError during structural group definition: {e}")
+                sys.exit(1)
+            except Exception as e:
+                print(f"\nAn unexpected error occurred defining structural groups: {e}")
+                traceback.print_exc()
+                sys.exit(1)
 
-        # Compute and plot for non-LLM modes
-        try:
-            compute_and_plot_model(geo_model)
-        except Exception as e:
-            print(f"\nAn error occurred during model computation or plotting: {e}")
-            traceback.print_exc()
-            return
+            # Compute and plot for non-LLM modes
+            try:
+                compute_and_plot_model(geo_model)
+            except Exception as e:
+                print(f"\nAn error occurred during model computation or plotting: {e}")
+                traceback.print_exc()
+                sys.exit(1)
 
-    print("Hutton LM script finished successfully.")
+        print("Hutton LM script finished successfully.")
 
 
 if __name__ == "__main__":
