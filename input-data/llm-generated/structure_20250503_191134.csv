@@ -1,0 +1,6 @@
+group_index,group_name,elements,relation
+0,seafloor_series,seafloor,ERODE
+1,right_series,"rock1,rock2",ONLAP
+2,onlap_series,onlap_surface,ERODE
+3,left_series,rock3,BASEMENT
+4,new_series,new_surface,ERODE
