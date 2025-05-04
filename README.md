@@ -6,11 +6,11 @@ A prototype language model interface for generating geological models\!
 
 ## Description
 
-Leveraging the power of [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/) and [GemPy](https://www.gempy.org/), `hutton-lm` is a Python package designed for generative geology. It utilizes the latest advancements in large language models to understand geological information and translate it into 3D geological models.
+Leveraging the power of [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/) and [GemPy](https://www.gempy.org/), `geo-lm` is a Python package designed for generative geology. It utilizes the latest advancements in large language models to understand geological information and translate it into 3D geological models.
 
 ## Functionality
 
-`hutton-lm` employs Llama 4's multi-modal inference capabilities to automate the process of creating geological models from existing documentation. The workflow involves the following key steps:
+`geo-lm` employs Llama 4's multi-modal inference capabilities to automate the process of creating geological models from existing documentation. The workflow involves the following key steps:
 
 1.  **Document Understanding:** The package can process geology reports and documents by reading OCRed text and interpreting extracted maps.
 2.  **Geological Knowledge Consolidation:** The interpreted information for a specific locality is then consolidated into a structured "geology DSL" (Domain Specific Language). This DSL encodes crucial geological knowledge, including:
@@ -26,7 +26,7 @@ Leveraging the power of [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-in
 
 ## Installation
 
-`hutton-lm` is a Python package managed with Poetry. To set up your environment, ensure you have Poetry installed. If not, you can install it following the instructions on the [official Poetry website](https://python-poetry.org/).
+`geo-lm` is a Python package managed with Poetry. To set up your environment, ensure you have Poetry installed. If not, you can install it following the instructions on the [official Poetry website](https://python-poetry.org/).
 
 Once Poetry is installed, navigate to the directory containing the `pyproject.toml` file and run:
 
@@ -59,5 +59,8 @@ This command will instruct the script to use the language model (`--input-mode l
 
 ## Contributing
 
-We welcome contributions to `hutton-lm`\! If you have ideas for improvements, new features, or bug fixes, please feel free to open an issue or submit a pull request.
+We welcome contributions to `geo-lm`\! If you have ideas for improvements, new features, or bug fixes, please feel free to open an issue or submit a pull request.
 
+## Notes
+
+This package was originally called `hutton-lm`, but was renamed to `geo-lm` last minute!
