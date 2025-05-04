@@ -49,7 +49,7 @@ def parse_pdf_command(args):
         sys.exit(1)  # Indicate failure
 
     # Call the placeholder image extraction function
-    print("\nAttempting placeholder image extraction...")
+    print("\nAttempting image extraction...")
     extract_images_from_pdf(args.input_pdf, output_dir)
 
 

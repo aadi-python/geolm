@@ -70,7 +70,7 @@ def extract_images_from_pdf(file_path: str, output_dir: str) -> None:
     if not validate_pdf(file_path):
         return None
 
-    print(f"TODO: Implement image extraction from {file_path} into {output_dir}")
+    # print(f"TODO: Implement image extraction from {file_path} into {output_dir}")
     # Placeholder: In a real implementation, this would extract images
     # and save them to the output_dir, potentially returning a list of image paths.
     return None
