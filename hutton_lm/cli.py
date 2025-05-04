@@ -10,7 +10,10 @@ from .data_loader import (
     DEFAULT_ORIENTATIONS_FILE,
     DEFAULT_STRUCTURE_FILE,
 )
-from .llm_interface import run_llm_generation
+from .llm_interface import (
+    run_llm_generation,
+    llm_consolidate_parsed_text,
+)
 from .model_builder import (
     initialize_geomodel_with_tmp_files,
     initialize_geomodel_from_files,
@@ -63,6 +66,39 @@ def run_model_command(args):
     # results = model.run(data)
     # builder.save_output(results, args.output_dir)
     print("Model run simulation complete.")
+
+
+def consolidate_text_command(args):
+    """Handles the consolidate-text command."""
+    input_file = args.input_file
+    output_file = args.output_file
+
+    print(f"Reading extracted text from: {input_file}")
+    try:
+        with open(input_file, "r", encoding="utf-8") as f:
+            extracted_text = f.read()
+    except FileNotFoundError:
+        print(f"Error: Input file not found at {input_file}")
+        sys.exit(1)
+    except IOError as e:
+        print(f"Error reading file {input_file}: {e}")
+        sys.exit(1)
+
+    print("Running LLM to consolidate text...")
+    consolidated_text = llm_consolidate_parsed_text(extracted_text)
+
+    output_dir = os.path.dirname(output_file)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    print(f"Saving consolidated text to: {output_file}")
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(consolidated_text)
+        print("Consolidation successful.")
+    except IOError as e:
+        print(f"Error writing to file {output_file}: {e}")
+        sys.exit(1)
 
 
 def main():
@@ -167,6 +203,24 @@ def main():
         help="Directory to save the extracted text file.",
     )
     parser_parse_pdf.set_defaults(func=parse_pdf_command)
+
+    # --- New Text Consolidation Subcommand ---
+    parser_consolidate = subparsers.add_parser(
+        "consolidate-text", help="Consolidate extracted text using an LLM."
+    )
+    parser_consolidate.add_argument(
+        "--input-file",
+        type=str,
+        default="extracted-data/bingham-canyon/extracted_text.txt",
+        help="Path to the input text file (output of parse-pdf).",
+    )
+    parser_consolidate.add_argument(
+        "--output-file",
+        type=str,
+        default="extracted-data/bingham-canyon/consolidated-text-rev01.txt",
+        help="Path to save the consolidated text output file.",
+    )
+    parser_consolidate.set_defaults(func=consolidate_text_command)
 
     args = parser.parse_args()
 

@@ -1,6 +1,7 @@
 import os
 import re
 from datetime import datetime
+from openai import OpenAI
 
 # Use relative import for data constants within the package
 from .data_loader import (
@@ -295,6 +296,43 @@ def run_llm_generation(prompt_type: str, temperature: float, output_dir: str):
         return None, None, None
 
     return generated_files  # Returns (points_filename, orientations_filename, structure_filename)
+
+
+# --- Text Consolidation --- #
+
+
+def llm_consolidate_parsed_text(pdf_text: str) -> str:
+    """
+    Consolidate the parsed text using the LLM
+    """
+
+    # Define the prompt text
+    prompt = f"""
+    You are a senior geologist with many years of experience.
+    You are given a geological description of a region from a report.
+    Your job is to consolidate the description into a single, coherent geological description.
+    Focus on: rock types present, the orientation of large-scale structures, stratigraphic relationships, erosion, and igneous intrusions.
+    Ignore: Chemical analysis, mineralogy, and other non-geological information.
+    Condense the description into one or two paragraphs without line breaks, avoid using headings and bullet points.
+    Here is the geological description:
+    {pdf_text}
+    """
+
+    # TODO: Move API Key/Base URL to config or environment variables
+    # Initialize the LLM client
+    client = OpenAI(
+        api_key="LLM|1092127122939929|swnut7Dzo4N-CdXCmXFLKxWJC9s",  # Sensitive - move out
+        base_url="https://api.llama.com/compat/v1/",
+    )
+    try:
+        completion = client.chat.completions.create(
+            model="Llama-4-Maverick-17B-128E-Instruct-FP8",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"Error during LLM text consolidation: {e}")
+        return "Error: Failed to consolidate text."
 
 
 # -----------------------------------

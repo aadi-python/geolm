@@ -108,8 +108,8 @@ print(pdf_text)
 
 # Step 2: Text summary of extracted data
 
-# consolidated_text = llm_consolidate_parsed_text(pdf_text)
-# print(consolidated_text)
+consolidated_text = llm_consolidate_parsed_text(pdf_text)
+print(consolidated_text)
 
 # Step 2b: Incorporate images into text summary
 
