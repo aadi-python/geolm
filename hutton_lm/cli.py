@@ -13,6 +13,7 @@ from .data_loader import (
 from .llm_interface import (
     run_llm_generation,
     llm_consolidate_parsed_text,
+    llm_generate_dsl_summary,
 )
 from .model_builder import (
     initialize_geomodel_with_tmp_files,
@@ -96,6 +97,43 @@ def consolidate_text_command(args):
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(consolidated_text)
         print("Consolidation successful.")
+    except IOError as e:
+        print(f"Error writing to file {output_file}: {e}")
+        sys.exit(1)
+
+
+def generate_dsl_command(args):
+    """Handles the generate-dsl command."""
+    input_file = args.input_file
+    output_file = args.output_file
+
+    print(f"Reading consolidated text from: {input_file}")
+    try:
+        with open(input_file, "r", encoding="utf-8") as f:
+            consolidated_text = f.read()
+    except FileNotFoundError:
+        print(f"Error: Input file not found at {input_file}")
+        sys.exit(1)
+    except IOError as e:
+        print(f"Error reading file {input_file}: {e}")
+        sys.exit(1)
+
+    if not consolidated_text.strip():
+        print(f"Error: Input file {input_file} is empty or contains only whitespace.")
+        sys.exit(1)
+
+    print("Running LLM to generate DSL...")
+    dsl_output = llm_generate_dsl_summary(consolidated_text)
+
+    output_dir = os.path.dirname(output_file)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    print(f"Saving generated DSL to: {output_file}")
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(dsl_output)
+        print("DSL generation successful.")
     except IOError as e:
         print(f"Error writing to file {output_file}: {e}")
         sys.exit(1)
@@ -221,6 +259,25 @@ def main():
         help="Path to save the consolidated text output file.",
     )
     parser_consolidate.set_defaults(func=consolidate_text_command)
+
+    # --- New DSL Generation Subcommand ---
+    parser_dsl = subparsers.add_parser(
+        "generate-dsl",
+        help="Generate geological DSL from consolidated text using an LLM.",
+    )
+    parser_dsl.add_argument(
+        "--input-file",
+        type=str,
+        default="extracted-data/bingham-canyon/consolidated-text-rev01.txt",
+        help="Path to the input consolidated text file.",
+    )
+    parser_dsl.add_argument(
+        "--output-file",
+        type=str,
+        default="extracted-data/bingham-canyon/geo-dsl-rev1.txt",
+        help="Path to save the generated DSL output file.",
+    )
+    parser_dsl.set_defaults(func=generate_dsl_command)
 
     args = parser.parse_args()
 
