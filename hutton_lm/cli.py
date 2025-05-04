@@ -81,7 +81,7 @@ def main():
         print("Initializing model using default data...")
         geo_model = initialize_geomodel_with_tmp_files(project_name)
     elif args.input_mode == "file":
-        print(f"Initializing model using files:")
+        print("Initializing model using files:")
         print(f"  Orientations: {args.orientations_file}")
         print(f"  Points: {args.points_file}")
         # File existence is checked implicitly by initialize_geomodel_from_files via read_file_content
