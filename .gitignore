@@ -42,3 +42,4 @@ venv.bak/
 Thumbs.db
 
 # Hutton LM Specific (add here as needed)
+*.hlog
