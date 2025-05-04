@@ -2,7 +2,7 @@
 
 A prototype language model interface for generating geological models\!
 
-![Logo|500](static/image.png)
+![Logo|500](static/image2.png)
 
 ## Description
 
