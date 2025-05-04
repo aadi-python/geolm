@@ -12,6 +12,42 @@ from datetime import datetime  # Import datetime
 import re  # Import regex for parsing
 import csv  # Add csv import
 
+# --- Global Constants for Default Data ---
+DEFAULT_INPUT_DIR = "input-data/default"
+DEFAULT_POINTS_FILE = os.path.join(DEFAULT_INPUT_DIR, "default_points.csv")
+DEFAULT_ORIENTATIONS_FILE = os.path.join(DEFAULT_INPUT_DIR, "default_orientations.csv")
+DEFAULT_STRUCTURE_FILE = os.path.join(DEFAULT_INPUT_DIR, "default_structure.csv")
+
+
+# Helper function to read file content
+def read_file_content(filepath: str) -> str | None:
+    """Reads the entire content of a file into a string."""
+    try:
+        with open(filepath, "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"Error: Default data file not found: {filepath}")
+        return None
+    except Exception as e:
+        print(f"Error reading default data file '{filepath}': {e}")
+        return None
+
+
+# Load default data into global constants
+DEFAULT_POINTS_DATA = read_file_content(DEFAULT_POINTS_FILE)
+DEFAULT_ORIENTATIONS_DATA = read_file_content(DEFAULT_ORIENTATIONS_FILE)
+DEFAULT_STRUCTURE_DATA = read_file_content(DEFAULT_STRUCTURE_FILE)
+
+# Basic check to ensure data loaded - script should ideally exit if these fail
+if (
+    DEFAULT_POINTS_DATA is None
+    or DEFAULT_ORIENTATIONS_DATA is None
+    or DEFAULT_STRUCTURE_DATA is None
+):
+    print("Critical Error: Failed to load essential default data files. Exiting.")
+    exit(1)  # Exit the script if default data is missing
+# -----------------------------------------
+
 # Attempt to import the Llama API client, handle import error gracefully
 try:
     from llama_api_client import LlamaAPIClient, APIError  # Import APIError too
@@ -19,60 +55,6 @@ except ImportError:
     print("Warning: llama_api_client not installed. LLM mode will not be available.")
     LlamaAPIClient = None
     APIError = None
-
-
-def input_points():
-    return """
-,X,Y,Z,X_r,Y_r,Z_r,surface,series,id,order_series
-0,200.0,0.0,-200.0,0.3126,0.46885,0.7501,seafloor,seafloor_series,6,1
-1,200.0,100.0,-200.0,0.3126,0.53135,0.7501,seafloor,seafloor_series,6,1
-2,500.0,0.0,-200.0,0.5001,0.46885,0.7501,seafloor,seafloor_series,6,1
-3,500.0,100.0,-200.0,0.5001,0.53135,0.7501,seafloor,seafloor_series,6,1
-4,800.0,0.0,-200.0,0.6876,0.46885,0.7501,seafloor,seafloor_series,6,1
-5,800.0,100.0,-200.0,0.6876,0.53135,0.7501,seafloor,seafloor_series,6,1
-7,700.0,0.0,-450.0,0.6251,0.46885,0.59385,rock1,right_series,4,2
-6,700.0,100.0,-450.0,0.6251,0.53135,0.59385,rock1,right_series,4,2
-8,900.0,0.0,-450.0,0.7501,0.46885,0.59385,rock1,right_series,4,2
-9,900.0,100.0,-450.0,0.7501,0.53135,0.59385,rock1,right_series,4,2
-13,700.0,0.0,-700.0,0.6251,0.46885,0.4376,rock2,right_series,5,2
-12,700.0,100.0,-700.0,0.6251,0.53135,0.4376,rock2,right_series,5,2
-11,900.0,0.0,-700.0,0.7501,0.46885,0.4376,rock2,right_series,5,2
-10,900.0,100.0,-700.0,0.7501,0.53135,0.4376,rock2,right_series,5,2
-14,300.0,0.0,-200.0,0.3751,0.46885,0.7501,onlap_surface,onlap_series,3,3
-15,300.0,100.0,-200.0,0.3751,0.53135,0.7501,onlap_surface,onlap_series,3,3
-16,700.0,0.0,-1000.0,0.6251,0.46885,0.2501,onlap_surface,onlap_series,3,3
-17,700.0,100.0,-1000.0,0.6251,0.53135,0.2501,onlap_surface,onlap_series,3,3
-18,550.0,0.0,-500.0,0.53135,0.46885,0.5626,onlap_surface,onlap_series,3,3
-19,550.0,100.0,-500.0,0.53135,0.53135,0.5626,onlap_surface,onlap_series,3,3
-20,100.0,0.0,-400.0,0.2501,0.46885,0.6251,rock3,left_series,2,4
-21,100.0,100.0,-400.0,0.2501,0.53135,0.6251,rock3,left_series,2,4
-22,450.0,0.0,-1000.0,0.46885,0.46885,0.2501,rock3,left_series,2,4
-23,450.0,100.0,-1000.0,0.46885,0.53135,0.2501,rock3,left_series,2,4
-24,300.0,0.0,-500.0,0.3751,0.46885,0.5626,rock3,left_series,2,4
-25,300.0,100.0,-500.0,0.3751,0.53135,0.5626,rock3,left_series,2,4
-    """
-
-
-def input_orientations():
-    return """
-,X,Y,Z,X_r,Y_r,Z_r,G_x,G_y,G_z,dip,azimuth,polarity,surface,series,id,order_series
-0,200.0,50.0,-200.0,0.3126,0.5001,0.7501,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,seafloor,seafloor_series,1,1
-1,500.0,50.0,-200.0,0.5001,0.5001,0.7501,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,seafloor,seafloor_series,1,1
-2,800.0,50.0,-200.0,0.6876,0.5001,0.7501,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,seafloor,seafloor_series,1,1
-4,700.0,50.0,-450.0,0.6251,0.5001,0.59385,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,rock1,right_series,2,2
-3,900.0,50.0,-450.0,0.7501,0.5001,0.59385,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,rock1,right_series,2,2
-6,700.0,50.0,-700.0,0.6251,0.5001,0.4376,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,rock2,right_series,3,2
-5,900.0,50.0,-700.0,0.7501,0.5001,0.4376,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,rock2,right_series,3,2
-7,300.0,50.0,-200.0,0.3751,0.5001,0.7501,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,onlap_surface,onlap_series,4,3
-8,700.0,50.0,-1000.0,0.6251,0.5001,0.2501,1.000000000001,1.0000612323399569e-12,1.0000612323399569e-12,90.0,90.0,1.0,onlap_surface,onlap_series,4,3
-9,550.0,50.0,-500.0,0.53135,0.5001,0.5626,0.766044443119978,1.0000469066937634e-12,0.6427876096875393,50.0,90.0,1.0,onlap_surface,onlap_series,4,3
-10,100.0,50.0,-400.0,0.2501,0.5001,0.6251,1e-12,1e-12,1.000000000001,0.0,0.0,1.0,rock3,left_series,5,4
-11,450.0,50.0,-1000.0,0.46885,0.5001,0.2501,1.000000000001,2.3054614646942163e-12,1.0000612323399569e-12,90.0,89.9999999999252,1.0,rock3,left_series,5,4
-12,300.0,50.0,-500.0,0.3751,0.5001,0.5626,0.766044443119978,1.0000469066937634e-12,0.6427876096875393,49.99999999992522,89.9999999999252,1.0,rock3,left_series,5,4
-    """
-
-
-# --- LLM Helper Functions ---
 
 
 def get_llm_prompt(prompt_type: str) -> str:
@@ -89,48 +71,38 @@ Now, generate the data, keeping the structure and headers consistent. Start with
     prompt_task = ""
     prompt_examples = ""
 
-    # --- Example Structure Data --- (Using the default as an example)
-    structure_example = """
-group_index,group_name,elements,relation
-0,seafloor_series,seafloor,ERODE
-1,right_series,"rock1,rock2",ONLAP
-2,onlap_series,onlap_surface,ERODE
-3,left_series,rock3,BASEMENT
-"""
-    # ------------------------------
-
     if prompt_type == "default":
         prompt_task = "Please generate three CSV datasets for GemPy: surface points, orientations, and structural definitions.\nUse the following examples as a base, but introduce some small modifications like changing some dip/azimuth values, adding or removing a rock type/surface (and updating structure accordingly), or adjusting point coordinates slightly."
         prompt_examples = f"""Example Points Data:
 ```csv
-{input_points().strip()}
+{DEFAULT_POINTS_DATA.strip()}
 ```
 
 Example Orientations Data:
 ```csv
-{input_orientations().strip()}
+{DEFAULT_ORIENTATIONS_DATA.strip()}
 ```
 
 Example Structure Data:
 ```csv
-{structure_example.strip()}
+{DEFAULT_STRUCTURE_DATA.strip()}
 ```"""
 
     elif prompt_type == "random":
         prompt_task = "Please generate three completely new CSV datasets suitable for GemPy: surface points, orientations, and structural group definitions.\nInvent a plausible but random geological structure (e.g., folded layers, a simple fault, an intrusion). Do NOT use the example data provided below as a base, only use it for format reference.\nDefine at least 3-5 distinct surfaces/rock types.\nGenerate a reasonable number of points (15-30) and orientations (10-20) to define the structure.\nEnsure the structural definitions reference only the surfaces/rock types defined in the points data and use only ERODE, ONLAP, or BASEMENT relations."
         prompt_examples = f"""Points Data Format Reference (DO NOT COPY VALUES):
 ```csv
-{input_points().strip()}
+{DEFAULT_POINTS_DATA.strip()}
 ```
 
 Orientations Data Format Reference (DO NOT COPY VALUES):
 ```csv
-{input_orientations().strip()}
+{DEFAULT_ORIENTATIONS_DATA.strip()}
 ```
 
 Structure Data Format Reference (DO NOT COPY VALUES):
 ```csv
-{structure_example.strip()}
+{DEFAULT_STRUCTURE_DATA.strip()}
 ```"""
 
     else:
@@ -452,13 +424,13 @@ def initialize_geomodel_with_tmp_files(project_name: str) -> gp.data.GeoModel:
         with tempfile.NamedTemporaryFile(
             mode="w", delete=False, suffix=".csv"
         ) as tmp_file_orientations:
-            tmp_file_orientations.write(input_orientations())
+            tmp_file_orientations.write(DEFAULT_ORIENTATIONS_DATA)  # Use constant
             temp_file_path_orientations = tmp_file_orientations.name
 
         with tempfile.NamedTemporaryFile(
             mode="w", delete=False, suffix=".csv"
         ) as tmp_file_points:
-            tmp_file_points.write(input_points())
+            tmp_file_points.write(DEFAULT_POINTS_DATA)  # Use constant
             temp_file_path_points = tmp_file_points.name
 
         # Pass the paths to the initialize function
