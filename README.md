@@ -57,6 +57,8 @@ python run.py \
 
 This command will instruct the script to use the language model (`--input-mode llm`) with a default prompting strategy (`--prompt-type default`) and save the LLM's output (the generated geology DSL) to the `input-data/llm-generated` directory.
 
+The --prompt-type DSL will be used if you want to run another example using a different pdf report you have extracted.
+
 ## Contributing
 
 We welcome contributions to `geo-lm`\! If you have ideas for improvements, new features, or bug fixes, please feel free to open an issue or submit a pull request.
