@@ -57,6 +57,12 @@ python run.py \
 
 This command will instruct the script to use the language model (`--input-mode llm`) with a default prompting strategy (`--prompt-type default`) and save the LLM's output (the generated geology DSL) to the `input-data/llm-generated` directory.
 
+### Notes on Running
+
+This repo was originally tested on the following (open access?) paper:
+
+Patrick B. Redmond, Marco T. Einaudi; The Bingham Canyon Porphyry Cu-Mo-Au Deposit. I. Sequence of Intrusions, Vein Formation, and Sulfide Deposition. Economic Geology 2010;; 105 (1): 43–68. doi: https://doi.org/10.2113/gsecongeo.105.1.43
+
 ## Contributing
 
 We welcome contributions to `geo-lm`\! If you have ideas for improvements, new features, or bug fixes, please feel free to open an issue or submit a pull request.
