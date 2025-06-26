@@ -59,7 +59,7 @@ This command will instruct the script to use the language model (`--input-mode l
 
 ### Notes on Running
 
-This repo was originally tested on the following (open access?) paper:
+This repo was originally tested on the following paper (a pdf copy can be found in `example-papers` folder):
 
 Patrick B. Redmond, Marco T. Einaudi; The Bingham Canyon Porphyry Cu-Mo-Au Deposit. I. Sequence of Intrusions, Vein Formation, and Sulfide Deposition. Economic Geology 2010;; 105 (1): 43–68. doi: https://doi.org/10.2113/gsecongeo.105.1.43
 
