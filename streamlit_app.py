@@ -1,4 +1,3 @@
-import argparse
 import os
 import tempfile
 import streamlit as st
@@ -11,7 +10,6 @@ from hutton_lm.llm_interface import (
 )
 from hutton_lm.model_builder import (
     initialize_geomodel_from_files,
-    initialize_geomodel_with_tmp_files,
     load_structural_definitions,
     define_structural_groups,
     compute_and_plot_model,
