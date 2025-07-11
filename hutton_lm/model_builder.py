@@ -6,6 +6,7 @@ import tempfile
 import csv
 from typing import Iterable
 import pandas as pd
+import re
 
 # Use relative import for data constants within the package
 from .data_loader import DEFAULT_POINTS_DATA, DEFAULT_ORIENTATIONS_DATA
@@ -26,18 +27,27 @@ def _sanitize_csv_headers(path: str, expected_headers: Iterable[str]) -> str:
     Columns are stripped of whitespace, common variations in case are mapped to
     the exact names provided in ``expected_headers``. Unnamed index columns are
     dropped. The original file remains untouched.
+
+    The function is tolerant of differing capitalisation and of common
+    separators such as spaces, underscores or dashes in the header names.
     """
+
     df = pd.read_csv(path)
     df.columns = [str(c).strip() for c in df.columns]
     df = df.loc[:, ~df.columns.str.match(r"^Unnamed")]
 
+    def _normalise(name: str) -> str:
+        """Return a simplified version of *name* suitable for comparison."""
+        return re.sub(r"[^a-z0-9]", "", name.strip().lower())
+
+    expected_map = {_normalise(e): e for e in expected_headers}
+
     mapping: dict[str, str] = {}
     for col in list(df.columns):
-        normalized = col.strip().lower()
-        for expected in expected_headers:
-            if normalized == expected.lower():
-                mapping[col] = expected
-                break
+        norm = _normalise(col)
+        if norm in expected_map:
+            mapping[col] = expected_map[norm]
+
     if mapping:
         df.rename(columns=mapping, inplace=True)
 
