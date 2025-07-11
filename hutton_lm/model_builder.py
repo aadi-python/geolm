@@ -261,20 +261,40 @@ def define_structural_groups(geo_model: gp.data.GeoModel, structural_definitions
         pass  # Group didn't exist, that's fine
 
 
-def compute_and_plot_model(geo_model: gp.data.GeoModel):
-    """Computes the GemPy model and generates the 3D plot."""
+def compute_and_plot_model(
+    geo_model: gp.data.GeoModel, return_html: bool = False
+) -> str | None:
+    """Computes the GemPy model and generates the 3D plot.
+
+    If ``return_html`` is ``True``, the plot is not shown directly. Instead the
+    plotter's HTML representation is returned so it can be embedded in a web
+    interface such as Streamlit.
+    """
+
     print("Computing model...")
     gp.compute_model(gempy_model=geo_model)
 
     print("Generating 3D plot...")
-    gpv.plot_3d(
+    vista = gpv.plot_3d(
         model=geo_model,
         show_surfaces=True,
         show_data=True,
         image=False,
         show_topography=True,
         kwargs_plot_structured_grid={"opacity": 0.2},
+        show=not return_html,
     )
+
+    if return_html:
+        if hasattr(vista, "p"):
+            try:
+                html_io = vista.p.export_html(None)
+                return html_io.getvalue()
+            except Exception as e:
+                print(f"Failed to export plot HTML: {e}")
+                return None
+        return None
+
     print("Plot window should be open.")
 
 
