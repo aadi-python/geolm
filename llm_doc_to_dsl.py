@@ -6,22 +6,22 @@ import fitz
 from tqdm import tqdm
 import requests
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 
-def deepseek_chat(prompt: str) -> str:
-    """Send a prompt to the DeepSeek API and return the response text."""
-    if not DEEPSEEK_API_KEY:
-        raise RuntimeError("DEEPSEEK_API_KEY environment variable not set")
-    url = f"{DEEPSEEK_BASE_URL.rstrip('/')}/chat/completions"
+def openrouter_chat(prompt: str) -> str:
+    """Send a prompt to the OpenRouter API and return the response text."""
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError("OPENROUTER_API_KEY environment variable not set")
+    url = f"{OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
     headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
     payload = {
-        "model": "deepseek-chat",
+        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
         "messages": [{"role": "user", "content": prompt}],
     }
     response = requests.post(url, headers=headers, json=payload, timeout=30)
@@ -30,8 +30,6 @@ def deepseek_chat(prompt: str) -> str:
 
 # Functions
 
-
-# https://github.com/meta-llama/llama-cookbook/blob/main/end-to-end-use-cases/NotebookLlama/Step-1%20PDF-Pre-Processing-Logic.ipynb
 def validate_pdf(file_path: str) -> bool:
     if not os.path.exists(file_path):
         print(f"Error: File not found at path: {file_path}")
@@ -107,7 +105,7 @@ def llm_consolidate_parsed_text(pdf_text: str) -> str:
     """
 
     try:
-        return deepseek_chat(prompt)
+        return openrouter_chat(prompt)
     except Exception as e:
         print(f"Error during text consolidation: {e}")
         return "Error: Failed to consolidate text."
@@ -122,7 +120,7 @@ def get_llm_summary_dsl(consolidated_text: str) -> str:
     prompt_dsl = prompt_dsl_template.format(consolidated_text)
 
     try:
-        return deepseek_chat(prompt_dsl)
+        return openrouter_chat(prompt_dsl)
     except Exception as e:
         print(f"Error during DSL generation: {e}")
         return "Error: Failed to generate DSL."
