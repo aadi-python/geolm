@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime
 import re
 import csv
+import requests
 
 # --- Global Constants for Default Data ---
 DEFAULT_INPUT_DIR = "input-data/default"
@@ -48,13 +49,9 @@ if (
     exit(1)
 # -----------------------------------------
 
-# Attempt to import the Llama API client, handle import error gracefully
-try:
-    from llama_api_client import LlamaAPIClient, APIError
-except ImportError:
-    print("Warning: llama_api_client not installed. LLM mode will not be available.")
-    LlamaAPIClient = None
-    APIError = None
+# DeepSeek API configuration
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 # --- LLM Helper Functions ---
 
@@ -126,69 +123,54 @@ Structure Data Format Reference (DO NOT COPY VALUES):
 
 
 def initialize_llm():
-    """Initializes and returns the Llama API client."""
-    if LlamaAPIClient is None:
-        print(
-            "Error: LlamaAPIClient is not available. Please install llama_api_client."
-        )
+    """Read DeepSeek credentials from the environment."""
+    if not DEEPSEEK_API_KEY:
+        print("Error: DEEPSEEK_API_KEY environment variable not set.")
         return None
-    api_key = os.environ.get("LLAMA_API_KEY")
-    if not api_key:
-        print("Error: LLAMA_API_KEY environment variable not set.")
-        return None
-    try:
-        client = LlamaAPIClient(api_key=api_key)
-        return client
-    except Exception as e:
-        print(f"Error initializing Llama API client: {e}")
-        return None
+    return {"api_key": DEEPSEEK_API_KEY, "base_url": DEEPSEEK_BASE_URL.rstrip("/")}
 
 
-def generate_data_with_llm(client, prompt, temperature):
-    """Calls the LLM API to generate data based on the prompt."""
-    if not client or not APIError:
-        print("Error: LLM Client or APIError not available.")
+def generate_data_with_llm(client_info, prompt, temperature):
+    """Calls the DeepSeek API to generate data based on the prompt."""
+    if not client_info:
         return None
+    url = f"{client_info['base_url']}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {client_info['api_key']}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+    }
     try:
-        print(f"Sending prompt to LLM (Temperature: {temperature})...")
-        response = client.chat.completions.create(
-            model="Llama-4-Maverick-17B-128E-Instruct-FP8",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-        )
-        print("LLM response received.")
-        print(response)  # Keep full response print for debugging
-        return response
-    except APIError as e:
-        print(f"LLM API Error: {e}")
-        return None
-    except Exception as e:
-        print(f"An unexpected error occurred during LLM generation: {e}")
+        print(f"Sending prompt to DeepSeek (Temperature: {temperature})...")
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        print("DeepSeek response received.")
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"DeepSeek API request failed: {e}")
         return None
 
 
 def parse_llm_response(llm_response_object):
-    """Parses the LLM response object to extract points, orientations, and structure CSV data."""
+    """Parses the DeepSeek API response to extract CSV data."""
     response_text = None
     try:
-        # Extract the text content from the response object structure
-        if (
-            llm_response_object
-            and hasattr(llm_response_object, "completion_message")
-            and hasattr(llm_response_object.completion_message, "content")
-            and hasattr(llm_response_object.completion_message.content, "text")
-        ):
-            response_text = llm_response_object.completion_message.content.text
-        else:
-            print("Error: Unexpected LLM response object structure.")
+        if isinstance(llm_response_object, dict):
+            response_text = (
+                llm_response_object.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content")
+            )
+        if not response_text:
+            print("Error: Unexpected DeepSeek response structure.")
             return None, None, None
-
-    except AttributeError as e:
-        print(f"Error accessing attributes in LLM response object: {e}")
-        return None, None, None
-
-    if not response_text:
-        print("Error: No text content found in LLM response.")
+    except Exception as e:
+        print(f"Error parsing DeepSeek response: {e}")
         return None, None, None
 
     # Use regex to find the data blocks, allowing for potential markdown code fences
@@ -361,12 +343,12 @@ def load_structural_definitions(filepath: str) -> list | None:
 
 # --- Deprecated LLM Functions --- #
 def generate_input_orientations_llm():
-    """Deprecated: Generate input orientations using Llama 4 API."""
+    """Deprecated placeholder for orientation generation via LLM."""
     pass
 
 
 def generate_input_points_llm():
-    """Deprecated: Generate input points using Llama 4 API."""
+    """Deprecated placeholder for points generation via LLM."""
     pass
 
 

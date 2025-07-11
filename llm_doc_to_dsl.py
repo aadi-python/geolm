@@ -1,10 +1,32 @@
-from openai import OpenAI
-import PyPDF2
 import os
 import base64
 from typing import Optional
+import PyPDF2
 import fitz
 from tqdm import tqdm
+import requests
+
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+
+
+def deepseek_chat(prompt: str) -> str:
+    """Send a prompt to the DeepSeek API and return the response text."""
+    if not DEEPSEEK_API_KEY:
+        raise RuntimeError("DEEPSEEK_API_KEY environment variable not set")
+    url = f"{DEEPSEEK_BASE_URL.rstrip('/')}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"]
 
 # Functions
 
@@ -84,16 +106,11 @@ def llm_consolidate_parsed_text(pdf_text: str) -> str:
     {pdf_text}
     """
 
-    # Initialize the LLM client
-    client = OpenAI(
-        api_key="LLM|1092127122939929|swnut7Dzo4N-CdXCmXFLKxWJC9s",
-        base_url="https://api.llama.com/compat/v1/",
-    )
-    completion = client.chat.completions.create(
-        model="Llama-4-Maverick-17B-128E-Instruct-FP8",
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return completion.choices[0].message.content
+    try:
+        return deepseek_chat(prompt)
+    except Exception as e:
+        print(f"Error during text consolidation: {e}")
+        return "Error: Failed to consolidate text."
 
 
 def get_llm_summary_dsl(consolidated_text: str) -> str:
@@ -104,15 +121,11 @@ def get_llm_summary_dsl(consolidated_text: str) -> str:
     # Convert consolidated text to prompt
     prompt_dsl = prompt_dsl_template.format(consolidated_text)
 
-    client = OpenAI(
-        api_key="LLM|1092127122939929|swnut7Dzo4N-CdXCmXFLKxWJC9s",
-        base_url="https://api.llama.com/compat/v1/",
-    )
-    completion = client.chat.completions.create(
-        model="Llama-4-Maverick-17B-128E-Instruct-FP8",
-        messages=[{"role": "user", "content": prompt_dsl}],
-    )
-    return completion.choices[0].message.content
+    try:
+        return deepseek_chat(prompt_dsl)
+    except Exception as e:
+        print(f"Error during DSL generation: {e}")
+        return "Error: Failed to generate DSL."
 
 
 # Step 1: Extract text from document

@@ -6,11 +6,11 @@ A prototype language model interface for generating geological models\!
 
 ## Description
 
-Leveraging the power of [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/) and [GemPy](https://www.gempy.org/), `geo-lm` is a Python package designed for generative geology. It utilizes the latest advancements in large language models to understand geological information and translate it into 3D geological models.
+Leveraging the power of the [DeepSeek API](https://api.deepseek.com/) and [GemPy](https://www.gempy.org/), `geo-lm` is a Python package designed for generative geology. It utilizes large language models to understand geological information and translate it into 3D geological models.
 
 ## Functionality
 
-`geo-lm` employs Llama 4's multi-modal inference capabilities to automate the process of creating geological models from existing documentation. The workflow involves the following key steps:
+`geo-lm` employs DeepSeek's language model capabilities to automate the process of creating geological models from existing documentation. The workflow involves the following key steps:
 
 1.  **Document Understanding:** The package can process geology reports and documents by reading OCRed text and interpreting extracted maps.
 2.  **Geological Knowledge Consolidation:** The interpreted information for a specific locality is then consolidated into a structured "geology DSL" (Domain Specific Language). This DSL encodes crucial geological knowledge, including:
@@ -38,15 +38,16 @@ This command will create a virtual environment and install all the necessary dep
 
 ## To Run
 
-Before running the example script, you'll need to set your Llama 4 API key as an environment variable:
+Before running the example script, set your DeepSeek API key (and optionally a custom base URL):
 
 ```bash
-export LLAMA_API_KEY=<your-key-here>
+export DEEPSEEK_API_KEY=<your-key-here>
+# export DEEPSEEK_BASE_URL=https://api.deepseek.com
 ```
 
-Replace `<your-key-here>` with your actual Llama 4 API key.
+Replace `<your-key-here>` with your actual DeepSeek API key.
 
-The provided example script `run.py` demonstrates how to initiate the geological modeling process using Llama 4. To run it, use the following command:
+The provided example script `run.py` demonstrates how to initiate the geological modeling process using the DeepSeek API. To run it, use the following command:
 
 ```bash
 python run.py \
