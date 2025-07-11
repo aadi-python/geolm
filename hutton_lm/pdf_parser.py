@@ -3,8 +3,6 @@ import PyPDF2
 from tqdm import tqdm
 from typing import Optional
 
-
-# https://github.com/meta-llama/llama-cookbook/blob/main/end-to-end-use-cases/NotebookLlama/Step-1%20PDF-Pre-Processing-Logic.ipynb
 def validate_pdf(file_path: str) -> bool:
     if not os.path.exists(file_path):
         print(f"Error: File not found at path: {file_path}")

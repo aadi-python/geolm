@@ -6,11 +6,11 @@ A prototype language model interface for generating geological models\!
 
 ## Description
 
-Leveraging the power of the [DeepSeek API](https://api.deepseek.com/) and [GemPy](https://www.gempy.org/), `geo-lm` is a Python package designed for generative geology. It utilizes large language models to understand geological information and translate it into 3D geological models.
+Leveraging the power of the [OpenRouter API](https://openrouter.ai/) and [GemPy](https://www.gempy.org/), `geo-lm` is a Python package designed for generative geology. It utilizes large language models to understand geological information and translate it into 3D geological models.
 
 ## Functionality
 
-`geo-lm` employs DeepSeek's language model capabilities to automate the process of creating geological models from existing documentation. The workflow involves the following key steps:
+`geo-lm` employs OpenRouter-compatible language model capabilities to automate the process of creating geological models from existing documentation. The workflow involves the following key steps:
 
 1.  **Document Understanding:** The package can process geology reports and documents by reading OCRed text and interpreting extracted maps.
 2.  **Geological Knowledge Consolidation:** The interpreted information for a specific locality is then consolidated into a structured "geology DSL" (Domain Specific Language). This DSL encodes crucial geological knowledge, including:
@@ -38,16 +38,16 @@ This command will create a virtual environment and install all the necessary dep
 
 ## To Run
 
-Before running the example script, set your DeepSeek API key (and optionally a custom base URL):
+Before running the example script, set your OpenRouter API key (and optionally a custom base URL):
 
 ```bash
-export DEEPSEEK_API_KEY=<your-key-here>
-# export DEEPSEEK_BASE_URL=https://api.deepseek.com
+export OPENROUTER_API_KEY=<your-key-here>
+# export OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 ```
 
-Replace `<your-key-here>` with your actual DeepSeek API key.
+Replace `<your-key-here>` with your actual OpenRouter API key.
 
-The provided example script `run.py` demonstrates how to initiate the geological modeling process using the DeepSeek API. To run it, use the following command:
+The provided example script `run.py` demonstrates how to initiate the geological modeling process using the OpenRouter API. To run it, use the following command:
 
 ```bash
 python run.py \
@@ -60,7 +60,7 @@ This command will instruct the script to use the language model (`--input-mode l
 
 ### Streamlit interface
 
-An experimental Streamlit app provides a simple web interface for uploading a PDF and viewing the resulting 3‑D model. Make sure the `DEEPSEEK_API_KEY` environment variable is set, then run:
+An experimental Streamlit app provides a simple web interface for uploading a PDF and viewing the resulting 3‑D model. Make sure the `OPENROUTER_API_KEY` environment variable is set, then run:
 
 ```bash
 streamlit run streamlit_app.py
