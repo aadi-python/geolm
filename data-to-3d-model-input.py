@@ -49,9 +49,9 @@ if (
     exit(1)
 # -----------------------------------------
 
-# DeepSeek API configuration
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+# OpenRouter API configuration
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 # --- LLM Helper Functions ---
 
@@ -123,15 +123,15 @@ Structure Data Format Reference (DO NOT COPY VALUES):
 
 
 def initialize_llm():
-    """Read DeepSeek credentials from the environment."""
-    if not DEEPSEEK_API_KEY:
-        print("Error: DEEPSEEK_API_KEY environment variable not set.")
+    """Read OpenRouter credentials from the environment."""
+    if not OPENROUTER_API_KEY:
+        print("Error: OPENROUTER_API_KEY environment variable not set.")
         return None
-    return {"api_key": DEEPSEEK_API_KEY, "base_url": DEEPSEEK_BASE_URL.rstrip("/")}
+    return {"api_key": OPENROUTER_API_KEY, "base_url": OPENROUTER_BASE_URL.rstrip("/")}
 
 
 def generate_data_with_llm(client_info, prompt, temperature):
-    """Calls the DeepSeek API to generate data based on the prompt."""
+    """Calls the OpenRouter API to generate data based on the prompt."""
     if not client_info:
         return None
     url = f"{client_info['base_url']}/chat/completions"
@@ -141,23 +141,23 @@ def generate_data_with_llm(client_info, prompt, temperature):
         "Accept": "application/json",
     }
     payload = {
-        "model": "deepseek-chat",
+        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temperature,
     }
     try:
-        print(f"Sending prompt to DeepSeek (Temperature: {temperature})...")
+        print(f"Sending prompt to OpenRouter (Temperature: {temperature})...")
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
-        print("DeepSeek response received.")
+        print("OpenRouter response received.")
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"DeepSeek API request failed: {e}")
+        print(f"OpenRouter API request failed: {e}")
         return None
 
 
 def parse_llm_response(llm_response_object):
-    """Parses the DeepSeek API response to extract CSV data."""
+    """Parses the OpenRouter API response to extract CSV data."""
     response_text = None
     try:
         if isinstance(llm_response_object, dict):
@@ -167,10 +167,10 @@ def parse_llm_response(llm_response_object):
                 .get("content")
             )
         if not response_text:
-            print("Error: Unexpected DeepSeek response structure.")
+            print("Error: Unexpected OpenRouter response structure.")
             return None, None, None
     except Exception as e:
-        print(f"Error parsing DeepSeek response: {e}")
+        print(f"Error parsing OpenRouter response: {e}")
         return None, None, None
 
     # Use regex to find the data blocks, allowing for potential markdown code fences

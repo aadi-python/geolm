@@ -62,5 +62,5 @@ if uploaded_pdf is not None:
                 st.error("Failed to generate plot HTML")
 
 st.write(
-    "Make sure the environment variable `DEEPSEEK_API_KEY` is set before running this app."
+    "Make sure the environment variable `OPENROUTER_API_KEY` is set before running this app."
 )
