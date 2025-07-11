@@ -4,6 +4,8 @@ import numpy as np
 import os
 import tempfile
 import csv
+from typing import Iterable
+import pandas as pd
 
 # Use relative import for data constants within the package
 from .data_loader import DEFAULT_POINTS_DATA, DEFAULT_ORIENTATIONS_DATA
@@ -16,6 +18,33 @@ RELATION_MAP = {
     "ONLAP": gp.data.StackRelationType.ONLAP,
     "BASEMENT": gp.data.StackRelationType.BASEMENT,
 }
+
+
+def _sanitize_csv_headers(path: str, expected_headers: Iterable[str]) -> str:
+    """Return a temporary CSV path with normalized headers.
+
+    Columns are stripped of whitespace, common variations in case are mapped to
+    the exact names provided in ``expected_headers``. Unnamed index columns are
+    dropped. The original file remains untouched.
+    """
+    df = pd.read_csv(path)
+    df.columns = [str(c).strip() for c in df.columns]
+    df = df.loc[:, ~df.columns.str.match(r"^Unnamed")]
+
+    mapping: dict[str, str] = {}
+    for col in list(df.columns):
+        normalized = col.strip().lower()
+        for expected in expected_headers:
+            if normalized == expected.lower():
+                mapping[col] = expected
+                break
+    if mapping:
+        df.rename(columns=mapping, inplace=True)
+
+    tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv")
+    df.to_csv(tmp.name, index=False)
+    tmp.close()
+    return tmp.name
 
 
 def load_structural_definitions(filepath: str) -> list | None:
@@ -123,18 +152,33 @@ def initialize_geomodel_from_files(
     if not os.path.isabs(path_to_points):
         path_to_points = os.path.join(_WORKSPACE_ROOT, path_to_points)
 
+    # Normalize headers to avoid KeyError issues when GemPy reads the files
+    sanitized_orientations = _sanitize_csv_headers(
+        path_to_orientations,
+        ["X", "Y", "Z", "G_x", "G_y", "G_z", "surface"],
+    )
+    sanitized_points = _sanitize_csv_headers(
+        path_to_points,
+        ["X", "Y", "Z", "surface"],
+    )
+
     geo_model: gp.data.GeoModel = gp.create_geomodel(
         project_name=project_name,
         extent=[-200, 1000, -500, 500, -1000, 0],
         resolution=[50, 50, 50],
         refinement=6,
         importer_helper=gp.data.ImporterHelper(
-            path_to_orientations=path_to_orientations,
-            path_to_surface_points=path_to_points,
+            path_to_orientations=sanitized_orientations,
+            path_to_surface_points=sanitized_points,
         ),
     )
     gp.set_topography_from_random(grid=geo_model.grid, d_z=np.array([-600, -100]))
     geo_model.input_transform.apply_anisotropy(gp.data.GlobalAnisotropy.NONE)
+    # Clean up the temporary sanitized files
+    if os.path.exists(sanitized_orientations):
+        os.remove(sanitized_orientations)
+    if os.path.exists(sanitized_points):
+        os.remove(sanitized_points)
     return geo_model
 
 
