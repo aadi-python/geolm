@@ -58,6 +58,16 @@ python run.py \
 
 This command will instruct the script to use the language model (`--input-mode llm`) with a default prompting strategy (`--prompt-type default`) and save the LLM's output (the generated geology DSL) to the `input-data/llm-generated` directory.
 
+### Streamlit interface
+
+An experimental Streamlit app provides a simple web interface for uploading a PDF and viewing the resulting 3‑D model. Make sure the `DEEPSEEK_API_KEY` environment variable is set, then run:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+After the upload completes the model will be displayed interactively in the browser. The app requires `pyvista` with its HTML export extras (`pip install "pyvista[jupyter]"`) for full functionality.
+
 ### Notes on Running
 
 This repo was originally tested on the following (open access?) paper:
