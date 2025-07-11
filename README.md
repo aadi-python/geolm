@@ -70,3 +70,13 @@ We welcome contributions to `geo-lm`\! If you have ideas for improvements, new f
 ## Notes
 
 This package was originally called `hutton-lm`, but was renamed to `geo-lm` last minute!
+
+## Streamlit App
+
+Launch the web demo with:
+
+```bash
+streamlit run streamlit_app.py --server.address 0.0.0.0
+```
+
+Other users on your local network can then open `http://<your-ip>:8501` to access the interface.

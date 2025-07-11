@@ -1,7 +1,8 @@
 import os
+import tempfile
 import PyPDF2
 from tqdm import tqdm
-from typing import Optional
+from typing import Optional, BinaryIO
 
 
 # https://github.com/meta-llama/llama-cookbook/blob/main/end-to-end-use-cases/NotebookLlama/Step-1%20PDF-Pre-Processing-Logic.ipynb
@@ -74,3 +75,19 @@ def extract_images_from_pdf(file_path: str, output_dir: str) -> None:
     # Placeholder: In a real implementation, this would extract images
     # and save them to the output_dir, potentially returning a list of image paths.
     return None
+
+
+def extract_text(uploaded_file: BinaryIO) -> Optional[str]:
+    """Extracts text from an uploaded PDF file object."""
+    if uploaded_file is None:
+        return None
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+        return extract_text_from_pdf(tmp_path)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)

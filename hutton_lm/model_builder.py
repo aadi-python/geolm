@@ -278,4 +278,26 @@ def compute_and_plot_model(geo_model: gp.data.GeoModel):
     print("Plot window should be open.")
 
 
+def compute_model_to_html(geo_model: gp.data.GeoModel, html_path: str) -> str:
+    """Computes the model and exports an interactive HTML visualization."""
+    import pyvista as pv
+    import nest_asyncio
+
+    nest_asyncio.apply()
+    pv.start_xvfb()
+
+    gp.compute_model(gempy_model=geo_model)
+    vista = gpv.plot_3d(
+        model=geo_model,
+        show_surfaces=True,
+        show_data=True,
+        image=False,
+        show_topography=True,
+        kwargs_plot_structured_grid={"opacity": 0.2},
+        show=False,
+    )
+    vista.p.export_html(html_path)
+    return html_path
+
+
 # ---------------------------------------

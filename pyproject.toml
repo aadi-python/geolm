@@ -21,6 +21,8 @@ llama-api-client = "^0.1.0"
 pymupdf = "^1.25.5"
 openai = "^1.77.0"
 pypdf2 = "^3.0.1"
+streamlit = "^1.46.0"
+streamlit-pyvista = "^0.0.18"
 
 
 [build-system]
