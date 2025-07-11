@@ -80,3 +80,4 @@ streamlit run streamlit_app.py --server.address 0.0.0.0
 ```
 
 Other users on your local network can then open `http://<your-ip>:8501` to access the interface.
+
