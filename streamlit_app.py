@@ -48,3 +48,4 @@ if uploaded and st.button("Submit"):
 st.markdown("## Launch")
 st.markdown("Run the app with:")
 st.code("streamlit run streamlit_app.py --server.address 0.0.0.0")
+
