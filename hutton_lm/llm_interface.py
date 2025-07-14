@@ -4,7 +4,10 @@ import json
 import csv
 import io
 from datetime import datetime
-import requests
+try:
+    import requests
+except Exception:  # pragma: no cover - gracefully handle missing requests
+    requests = None
 
 # Use relative import for data constants within the package
 from .data_loader import (
@@ -174,6 +177,10 @@ def generate_data_with_llm(client_info, prompt, temperature):
         print("Error: OpenRouter configuration missing.")
         return None
 
+    if requests is None:
+        print("Error: requests library is not available. Cannot call API.")
+        return None
+
     url = f"{client_info['base_url']}/chat/completions"
     headers = {
         "Authorization": f"Bearer {client_info['api_key']}",
@@ -192,7 +199,7 @@ def generate_data_with_llm(client_info, prompt, temperature):
         response.raise_for_status()
         print("OpenRouter response received.")
         return response.json()
-    except requests.exceptions.RequestException as e:
+    except Exception as e:  # pragma: no cover - network/runtime errors
         print(f"OpenRouter API request failed: {e}")
         return None
 
