@@ -1,7 +1,6 @@
 import argparse
 import os
 import sys
-import numpy as np
 import traceback
 
 # Ensure the package directory is in the Python path
@@ -97,6 +96,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Import numpy lazily so --help works without it installed
+    import numpy as np
 
     # Import heavy dependencies lazily after argument parsing so --help works
     try:
