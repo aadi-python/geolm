@@ -297,11 +297,11 @@ def parse_llm_response(llm_response_object):
             r"(?s)=== STRUCTURE DATA ===\n(.*?)\Z", response_text
         )
 
-    points_csv = points_match.group(1).strip() if points_match else None
+    points_csv = points_match.group(1).rstrip("`").strip() if points_match else None
     orientations_csv = (
-        orientations_match.group(1).strip() if orientations_match else None
+        orientations_match.group(1).rstrip("`").strip() if orientations_match else None
     )
-    structure_csv = structure_match.group(1).strip() if structure_match else None
+    structure_csv = structure_match.group(1).rstrip("`").strip() if structure_match else None
 
     if points_csv:
         points_csv = _remove_index_column(points_csv)

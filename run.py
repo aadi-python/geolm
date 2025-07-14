@@ -3,10 +3,7 @@ import os
 import sys
 import traceback
 
-# Ensure the package directory is in the Python path
-# This assumes the script is run from the workspace root
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
+# ``hutton_lm`` adds the project root to ``sys.path`` on import
 
 try:
     from hutton_lm.data_loader import (
@@ -94,6 +91,12 @@ def main():
         default=15,
         help="Retry attempts for LLM-based GemPy input generation.",
     )
+    gempy_group.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for GemPy modelling",
+    )
 
     args = parser.parse_args()
 
@@ -128,8 +131,8 @@ def main():
 
     pdf_text = None  # Initialize variable
 
-    # Set numpy seed for reproducibility in GemPy step
-    np.random.seed(1515)
+    if args.seed is not None:
+        np.random.seed(args.seed)
 
     # --- Workflow Execution ---
     try:

@@ -1,7 +1,6 @@
 import argparse
 import os
 import sys
-import numpy as np
 import traceback
 
 # Use relative imports for package modules
@@ -25,9 +24,7 @@ from .model_builder import (
     compute_and_plot_model,
 )
 
-# Ensure the package directory is in the Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
+# ``hutton_lm`` adds the project root to ``sys.path`` on import
 
 
 def parse_pdf_command(args):
@@ -333,6 +330,12 @@ def main():
         default=5,
         help="Number of times to retry LLM generation/model building if an error occurs (--input-mode=llm).",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for GemPy modelling",
+    )
 
     subparsers = parser.add_subparsers(
         dest="command",
@@ -414,6 +417,11 @@ def main():
 
     args = parser.parse_args()
 
+    if args.seed is not None:
+        import numpy as np
+
+        np.random.seed(args.seed)
+
     # --- Command Execution --- #
     if args.command:
         # Execute the function associated with the chosen subcommand
@@ -429,6 +437,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # Set seed for reproducibility if the package is run via cli module
-    np.random.seed(1515)
     main()

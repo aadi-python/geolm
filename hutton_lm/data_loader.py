@@ -42,6 +42,6 @@ if (
     or DEFAULT_ORIENTATIONS_DATA is None
     or DEFAULT_STRUCTURE_DATA is None
 ):
-    print("Critical Error: Failed to load essential default data files.")
-    print(f"Looked in: {DEFAULT_INPUT_DIR}")
-    sys.exit(1)
+    raise FileNotFoundError(
+        f"Failed to load default CSV files from {DEFAULT_INPUT_DIR}"
+    )

@@ -2,10 +2,7 @@ import argparse
 import os
 import sys
 
-# Ensure the package directory is in the Python path
-# This assumes the script is run from the workspace root
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
+# ``hutton_lm`` adjusts the module path when imported
 
 try:
     # Use absolute import assuming the package is installed or in the path

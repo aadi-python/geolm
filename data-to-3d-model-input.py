@@ -3,7 +3,10 @@ Refactored version of data-to-3d-model.py focusing on clarity and modularity.
 """
 
 import gempy as gp
-import gempy_viewer as gpv
+try:
+    import gempy_viewer as gpv
+except Exception:  # pragma: no cover - optional viewer
+    gpv = None
 import numpy as np
 import os
 import tempfile
@@ -12,7 +15,18 @@ from datetime import datetime
 import re
 import csv
 import io
-import requests
+try:
+    import requests
+except Exception:  # pragma: no cover - optional
+    requests = None
+
+from hutton_lm.llm_interface import (
+    get_llm_prompt,
+    initialize_llm,
+    generate_data_with_llm,
+    parse_llm_response,
+    save_generated_data,
+)
 
 # --- Global Constants for Default Data ---
 DEFAULT_INPUT_DIR = "input-data/default"
@@ -55,272 +69,6 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 # --- LLM Helper Functions ---
-
-
-def get_llm_prompt(prompt_type: str) -> str:
-    """Builds and returns the appropriate LLM prompt string based on the type."""
-
-    prompt_intro = "You are a helpful assistant for geological modeling. Please generate three completely new CSV datasets suitable for GemPy: surface points, orientations, and structural group definitions."
-    prompt_format_suffix = """Ensure the output format is exactly CSV, with the correct columns as shown in the reference/examples.
-Clearly separate the three datasets using '=== POINTS DATA ===', '=== ORIENTATIONS DATA ===', and '=== STRUCTURE DATA ===' markers.
-Include the CSV data within markdown code blocks (```csv ... ```).
-For the structure data, use only the following relations: ERODE, ONLAP, BASEMENT.
-
-Now, generate the data, keeping the structure and headers consistent. Start with '=== POINTS DATA ==='."""
-
-    prompt_task = ""
-    prompt_examples = ""
-
-    if prompt_type == "default":
-        prompt_task = "Please generate three CSV datasets for GemPy: surface points, orientations, and structural definitions.\nUse the following examples as a base, but introduce some small modifications like changing some dip/azimuth values, adding or removing a rock type/surface (and updating structure accordingly), or adjusting point coordinates slightly."
-        prompt_examples = f"""Example Points Data:
-```csv
-{DEFAULT_POINTS_DATA.strip()}
-```
-
-Example Orientations Data:
-```csv
-{DEFAULT_ORIENTATIONS_DATA.strip()}
-```
-
-Example Structure Data:
-```csv
-{DEFAULT_STRUCTURE_DATA.strip()}
-```"""
-
-    elif prompt_type == "random":
-        prompt_task = "Please generate three completely new CSV datasets suitable for GemPy: surface points, orientations, and structural group definitions.\nInvent a plausible but random geological structure (e.g., folded layers, a simple fault, an intrusion). Do NOT use the example data provided below as a base, only use it for format reference.\nDefine at least 3-5 distinct surfaces/rock types.\nGenerate a reasonable number of points (15-30) and orientations (10-20) to define the structure.\nEnsure the structural definitions reference only the surfaces/rock types defined in the points data and use only ERODE, ONLAP, or BASEMENT relations."
-        prompt_examples = f"""Points Data Format Reference (DO NOT COPY VALUES):
-```csv
-{DEFAULT_POINTS_DATA.strip()}
-```
-
-Orientations Data Format Reference (DO NOT COPY VALUES):
-```csv
-{DEFAULT_ORIENTATIONS_DATA.strip()}
-```
-
-Structure Data Format Reference (DO NOT COPY VALUES):
-```csv
-{DEFAULT_STRUCTURE_DATA.strip()}
-```"""
-
-    else:
-        print(
-            f"Warning: Unknown prompt type '{prompt_type}'. Falling back to default prompt."
-        )
-        return get_llm_prompt("default")  # Recursive call with default
-
-    # Combine the sections
-    full_prompt = f"""{prompt_intro}
-
-{prompt_task}
-
-{prompt_examples}
-
-{prompt_format_suffix}"""
-
-    return full_prompt
-
-
-def initialize_llm():
-    """Read OpenRouter credentials from the environment."""
-    if not OPENROUTER_API_KEY:
-        print("Error: OPENROUTER_API_KEY environment variable not set.")
-        return None
-    return {"api_key": OPENROUTER_API_KEY, "base_url": OPENROUTER_BASE_URL.rstrip("/")}
-
-
-def generate_data_with_llm(client_info, prompt, temperature):
-    """Calls the OpenRouter API to generate data based on the prompt."""
-    if not client_info:
-        return None
-    url = f"{client_info['base_url']}/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {client_info['api_key']}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    payload = {
-        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": temperature,
-    }
-    try:
-        print(f"Sending prompt to OpenRouter (Temperature: {temperature})...")
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        print("OpenRouter response received.")
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"OpenRouter API request failed: {e}")
-        return None
-
-
-def _remove_index_column(csv_text: str) -> str:
-    """Return CSV text with any leading index column removed."""
-    try:
-        lines = list(csv.reader(io.StringIO(csv_text)))
-        if not lines:
-            return csv_text
-        header = lines[0]
-        if header and (header[0] == "" or header[0].lower().startswith("unnamed")):
-            lines = [row[1:] for row in lines]
-        output = io.StringIO()
-        csv.writer(output, lineterminator="\n").writerows(lines)
-        return output.getvalue().strip()
-    except Exception:
-        # If any parsing error occurs, return original text
-        return csv_text
-
-
-def _sanitize_headers_in_csv(csv_text: str, expected_headers: list[str]) -> str:
-    """Normalize header names using pandas if available."""
-    try:
-        import pandas as pd
-    except Exception:
-        return csv_text
-
-    try:
-        df = pd.read_csv(io.StringIO(csv_text))
-        df.columns = [str(c).strip() for c in df.columns]
-        df = df.loc[:, ~df.columns.str.match(r"^Unnamed")]  # drop index cols
-
-        def _norm(name: str) -> str:
-            return re.sub(r"[^a-z0-9]", "", name.strip().lower())
-
-        expected_map = {_norm(e): e for e in expected_headers}
-        mapping = {}
-        for col in list(df.columns):
-            n = _norm(col)
-            if n in expected_map:
-                mapping[col] = expected_map[n]
-        if mapping:
-            df.rename(columns=mapping, inplace=True)
-
-        out = io.StringIO()
-        df.to_csv(out, index=False, lineterminator="\n")
-        return out.getvalue().strip()
-    except Exception:
-        return csv_text
-
-
-def parse_llm_response(llm_response_object):
-    """Parses the OpenRouter API response to extract CSV data."""
-    response_text = None
-    try:
-        if isinstance(llm_response_object, dict):
-            response_text = (
-                llm_response_object.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content")
-            )
-        if not response_text:
-            print("Error: Unexpected OpenRouter response structure.")
-            return None, None, None
-    except Exception as e:
-        print(f"Error parsing OpenRouter response: {e}")
-        return None, None, None
-
-    # Use regex to find the data blocks, allowing for potential markdown code fences
-    points_match = re.search(
-        r"(?s)=== POINTS DATA ===.*?```csv\n(.*?)\n```", response_text
-    )
-    if not points_match:  # Fallback without code fences
-        points_match = re.search(
-            r"(?s)=== POINTS DATA ===\n(.*?)\n=== ORIENTATIONS DATA ===", response_text
-        )
-
-    orientations_match = re.search(
-        r"(?s)=== ORIENTATIONS DATA ===.*?```csv\n(.*?)\n```", response_text
-    )
-    if not orientations_match:  # Fallback without code fences
-        orientations_match = re.search(
-            r"(?s)=== ORIENTATIONS DATA ===\n(.*?)\n=== STRUCTURE DATA ===",
-            response_text,
-        )
-
-    structure_match = re.search(
-        r"(?s)=== STRUCTURE DATA ===.*?```csv\n(.*?)\n```", response_text
-    )
-    if not structure_match:  # Fallback without code fences
-        structure_match = re.search(
-            r"(?s)=== STRUCTURE DATA ===\n(.*?)\Z", response_text
-        )
-
-    points_csv = points_match.group(1).strip() if points_match else None
-    orientations_csv = (
-        orientations_match.group(1).strip() if orientations_match else None
-    )
-    structure_csv = structure_match.group(1).strip() if structure_match else None
-
-    # Remove any leading index columns that may have been included
-    if points_csv:
-        points_csv = _remove_index_column(points_csv)
-        points_csv = _sanitize_headers_in_csv(
-            points_csv, ["X", "Y", "Z", "surface"]
-        )
-    if orientations_csv:
-        orientations_csv = _remove_index_column(orientations_csv)
-        orientations_csv = _sanitize_headers_in_csv(
-            orientations_csv,
-            ["X", "Y", "Z", "G_x", "G_y", "G_z", "surface"],
-        )
-    if structure_csv:
-        structure_csv = _remove_index_column(structure_csv)
-        structure_csv = _sanitize_headers_in_csv(
-            structure_csv,
-            ["group_index", "group_name", "elements", "relation"],
-        )
-
-    if not points_csv or not orientations_csv or not structure_csv:
-        print(
-            "Error: Could not parse points, orientations, and/or structure data from LLM response text."
-        )
-        print(
-            "Expected format markers: === POINTS DATA ===, === ORIENTATIONS DATA ===, === STRUCTURE DATA ==="
-        )
-        # print("\n--- LLM Raw Response Text ---\n") # Optional debug print
-        # print(response_text)
-        # print("\n--- End Raw Response Text ---\n")
-        return None, None, None
-
-    return points_csv, orientations_csv, structure_csv
-
-
-def save_generated_data(points_csv, orientations_csv, structure_csv, output_dir):
-    """Saves the generated points, orientations, and structure data to timestamped files."""
-    try:
-        os.makedirs(output_dir, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        points_filename = os.path.join(output_dir, f"points_{timestamp}.csv")
-        orientations_filename = os.path.join(
-            output_dir, f"orientations_{timestamp}.csv"
-        )
-        structure_filename = os.path.join(output_dir, f"structure_{timestamp}.csv")
-
-        with open(points_filename, "w") as f:
-            f.write(points_csv)
-        print(f"Saved generated points data to: {points_filename}")
-
-        with open(orientations_filename, "w") as f:
-            f.write(orientations_csv)
-        print(f"Saved generated orientations data to: {orientations_filename}")
-
-        with open(structure_filename, "w") as f:
-            f.write(structure_csv)
-        print(f"Saved generated structure data to: {structure_filename}")
-
-        return points_filename, orientations_filename, structure_filename
-    except OSError as e:
-        print(f"Error creating directory or writing files: {e}")
-        return None, None, None
-    except Exception as e:
-        print(f"An unexpected error occurred during saving: {e}")
-        return None, None, None
-
-
-# --- End LLM Helper Functions ---
 
 # --- CSV Structural Definition Loading ---
 
@@ -563,6 +311,10 @@ def compute_and_plot_model(geo_model: gp.data.GeoModel):
     """Computes the GemPy model and generates the 3D plot."""
     print("Computing model...")
     gp.compute_model(gempy_model=geo_model)
+
+    if gpv is None:
+        print("gempy_viewer is not available; skipping plot.")
+        return
 
     print("Generating 3D plot...")
     gpv.plot_3d(

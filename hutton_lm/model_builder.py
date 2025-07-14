@@ -1,11 +1,21 @@
-import gempy as gp
-import gempy_viewer as gpv
-import numpy as np
+from __future__ import annotations
+
+try:
+    import gempy as gp
+except Exception:  # pragma: no cover - optional dependency
+    gp = None
+try:
+    import gempy_viewer as gpv
+except Exception:  # pragma: no cover - optional viewer
+    gpv = None
 import os
 import tempfile
 import csv
 from typing import Iterable
-import pandas as pd
+try:
+    import pandas as pd
+except Exception:  # pragma: no cover - optional dependency
+    pd = None
 import re
 
 # Use relative import for data constants within the package
@@ -14,11 +24,14 @@ from .data_loader import DEFAULT_POINTS_DATA, DEFAULT_ORIENTATIONS_DATA
 # --- CSV Structural Definition Loading ---
 
 # Mapping from CSV relation string to GemPy enum
-RELATION_MAP = {
-    "ERODE": gp.data.StackRelationType.ERODE,
-    "ONLAP": gp.data.StackRelationType.ONLAP,
-    "BASEMENT": gp.data.StackRelationType.BASEMENT,
-}
+if gp is not None:
+    RELATION_MAP = {
+        "ERODE": gp.data.StackRelationType.ERODE,
+        "ONLAP": gp.data.StackRelationType.ONLAP,
+        "BASEMENT": gp.data.StackRelationType.BASEMENT,
+    }
+else:
+    RELATION_MAP = {}
 
 
 def _sanitize_csv_headers(path: str, expected_headers: Iterable[str]) -> str:
@@ -31,6 +44,9 @@ def _sanitize_csv_headers(path: str, expected_headers: Iterable[str]) -> str:
     The function is tolerant of differing capitalisation and of common
     separators such as spaces, underscores or dashes in the header names.
     """
+
+    if pd is None:
+        raise ImportError("pandas is required for CSV sanitization")
 
     df = pd.read_csv(path)
     df.columns = [str(c).strip() for c in df.columns]
@@ -160,6 +176,9 @@ def initialize_geomodel_from_files(
     project_name: str, path_to_orientations: str, path_to_points: str
 ) -> gp.data.GeoModel:
     """Initializes the GemPy GeoModel with data and topography from files."""
+    if gp is None:
+        raise ImportError("gempy is required for model building")
+    import numpy as np
     # Ensure paths are absolute or resolved relative to workspace root if needed
     # Assuming paths provided here are intended to be directly usable
     from .data_loader import _WORKSPACE_ROOT
@@ -201,38 +220,24 @@ def initialize_geomodel_from_files(
 
 def initialize_geomodel_with_tmp_files(project_name: str) -> gp.data.GeoModel | None:
     """Initializes the GemPy GeoModel using default data written to temporary files."""
-    temp_file_path_orientations = None
-    temp_file_path_points = None
+    if gp is None:
+        raise ImportError("gempy is required for model building")
     geo_model = None
     try:
-        # Create temporary files for default data
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".csv"
-        ) as tmp_file_orientations:
-            tmp_file_orientations.write(DEFAULT_ORIENTATIONS_DATA)
-            temp_file_path_orientations = tmp_file_orientations.name
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orient_path = os.path.join(tmp_dir, "orient.csv")
+            points_path = os.path.join(tmp_dir, "points.csv")
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".csv"
-        ) as tmp_file_points:
-            tmp_file_points.write(DEFAULT_POINTS_DATA)
-            temp_file_path_points = tmp_file_points.name
+            with open(orient_path, "w") as f:
+                f.write(DEFAULT_ORIENTATIONS_DATA)
+            with open(points_path, "w") as f:
+                f.write(DEFAULT_POINTS_DATA)
 
-        # Initialize model using the temporary file paths
-        # These paths are absolute from NamedTemporaryFile
-        geo_model = initialize_geomodel_from_files(
-            project_name, temp_file_path_orientations, temp_file_path_points
-        )
-
+            geo_model = initialize_geomodel_from_files(
+                project_name, orient_path, points_path
+            )
     except Exception as e:
         print(f"Error during temporary file creation or model initialization: {e}")
-        # geo_model remains None
-    finally:
-        # Clean up the temporary files regardless of success/failure
-        if temp_file_path_points and os.path.exists(temp_file_path_points):
-            os.remove(temp_file_path_points)
-        if temp_file_path_orientations and os.path.exists(temp_file_path_orientations):
-            os.remove(temp_file_path_orientations)
 
     return geo_model  # Return the model (or None if initialization failed)
 
@@ -332,8 +337,15 @@ def compute_and_plot_model(
     interface such as Streamlit.
     """
 
+    if gp is None:
+        raise ImportError("gempy is required for model computation")
+
     print("Computing model...")
     gp.compute_model(gempy_model=geo_model)
+
+    if gpv is None:
+        print("gempy_viewer is not available; skipping plot.")
+        return None
 
     print("Generating 3D plot...")
     vista = gpv.plot_3d(
