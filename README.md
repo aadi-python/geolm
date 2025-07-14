@@ -81,3 +81,6 @@ We welcome contributions to `geo-lm`\! If you have ideas for improvements, new f
 ## Notes
 
 This package was originally called `hutton-lm`, but was renamed to `geo-lm` last minute!
+The default CSV examples now omit any leading index column, and the library
+automatically normalizes headers when building models to avoid `KeyError`
+issues.
