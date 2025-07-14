@@ -266,6 +266,12 @@ def parse_llm_response(llm_response_object):
             orientations_csv,
             ["X", "Y", "Z", "G_x", "G_y", "G_z", "surface"],
         )
+    if structure_csv:
+        structure_csv = _remove_index_column(structure_csv)
+        structure_csv = _sanitize_headers_in_csv(
+            structure_csv,
+            ["group_index", "group_name", "elements", "relation"],
+        )
 
     if not points_csv or not orientations_csv or not structure_csv:
         print(
