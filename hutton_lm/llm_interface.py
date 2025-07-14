@@ -8,6 +8,10 @@ try:
     import requests
 except Exception:  # pragma: no cover - gracefully handle missing requests
     requests = None
+try:
+    import pandas as pd
+except Exception:  # pragma: no cover - optional
+    pd = None
 
 # Use relative import for data constants within the package
 from .data_loader import (
@@ -220,6 +224,36 @@ def _remove_index_column(csv_text: str) -> str:
         return csv_text
 
 
+def _sanitize_headers_in_csv(csv_text: str, expected_headers: list[str]) -> str:
+    """Normalize header names using pandas if available."""
+    if pd is None:
+        return csv_text
+    try:
+        df = pd.read_csv(io.StringIO(csv_text))
+        df.columns = [str(c).strip() for c in df.columns]
+        df = df.loc[:, ~df.columns.str.match(r"^Unnamed")]  # drop index cols
+
+        def _norm(name: str) -> str:
+            import re
+
+            return re.sub(r"[^a-z0-9]", "", name.strip().lower())
+
+        expected_map = {_norm(e): e for e in expected_headers}
+        mapping = {}
+        for col in list(df.columns):
+            n = _norm(col)
+            if n in expected_map:
+                mapping[col] = expected_map[n]
+        if mapping:
+            df.rename(columns=mapping, inplace=True)
+
+        out = io.StringIO()
+        df.to_csv(out, index=False, lineterminator="\n")
+        return out.getvalue().strip()
+    except Exception:
+        return csv_text
+
+
 def parse_llm_response(llm_response_object):
     """Parses the OpenRouter API response to extract CSV data."""
     response_text = None
@@ -271,8 +305,15 @@ def parse_llm_response(llm_response_object):
 
     if points_csv:
         points_csv = _remove_index_column(points_csv)
+        points_csv = _sanitize_headers_in_csv(
+            points_csv, ["X", "Y", "Z", "surface"]
+        )
     if orientations_csv:
         orientations_csv = _remove_index_column(orientations_csv)
+        orientations_csv = _sanitize_headers_in_csv(
+            orientations_csv,
+            ["X", "Y", "Z", "G_x", "G_y", "G_z", "surface"],
+        )
 
     if not points_csv or not orientations_csv or not structure_csv:
         print(
