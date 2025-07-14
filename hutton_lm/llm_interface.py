@@ -1,8 +1,13 @@
 import os
 import re
 import json
+import csv
+import io
 from datetime import datetime
-import requests
+try:
+    import requests
+except Exception:  # pragma: no cover - gracefully handle missing requests
+    requests = None
 
 # Use relative import for data constants within the package
 from .data_loader import (
@@ -172,6 +177,10 @@ def generate_data_with_llm(client_info, prompt, temperature):
         print("Error: OpenRouter configuration missing.")
         return None
 
+    if requests is None:
+        print("Error: requests library is not available. Cannot call API.")
+        return None
+
     url = f"{client_info['base_url']}/chat/completions"
     headers = {
         "Authorization": f"Bearer {client_info['api_key']}",
@@ -190,9 +199,25 @@ def generate_data_with_llm(client_info, prompt, temperature):
         response.raise_for_status()
         print("OpenRouter response received.")
         return response.json()
-    except requests.exceptions.RequestException as e:
+    except Exception as e:  # pragma: no cover - network/runtime errors
         print(f"OpenRouter API request failed: {e}")
         return None
+
+
+def _remove_index_column(csv_text: str) -> str:
+    """Return CSV text with any leading index column removed."""
+    try:
+        lines = list(csv.reader(io.StringIO(csv_text)))
+        if not lines:
+            return csv_text
+        header = lines[0]
+        if header and (header[0] == "" or header[0].lower().startswith("unnamed")):
+            lines = [row[1:] for row in lines]
+        output = io.StringIO()
+        csv.writer(output, lineterminator="\n").writerows(lines)
+        return output.getvalue().strip()
+    except Exception:
+        return csv_text
 
 
 def parse_llm_response(llm_response_object):
@@ -243,6 +268,11 @@ def parse_llm_response(llm_response_object):
         orientations_match.group(1).strip() if orientations_match else None
     )
     structure_csv = structure_match.group(1).strip() if structure_match else None
+
+    if points_csv:
+        points_csv = _remove_index_column(points_csv)
+    if orientations_csv:
+        orientations_csv = _remove_index_column(orientations_csv)
 
     if not points_csv or not orientations_csv or not structure_csv:
         print(
