@@ -10,26 +10,16 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
 try:
-    # Import necessary functions from the hutton_lm package
-    from hutton_lm.pdf_parser import extract_text_from_pdf, extract_images_from_pdf
-    from hutton_lm.llm_interface import (
-        llm_consolidate_parsed_text,
-        llm_generate_dsl_summary,
-    )
-    from hutton_lm.cli import run_core_gempy_workflow  # Import the refactored function
-
-    # Also import defaults needed for argparse
     from hutton_lm.data_loader import (
         DEFAULT_POINTS_FILE,
         DEFAULT_ORIENTATIONS_FILE,
         DEFAULT_STRUCTURE_FILE,
     )
-except ImportError as e:
-    print(f"Error: Could not import hutton_lm package components: {e}")
-    print(
-        "Ensure the package is installed or the script is run from the correct directory."
-    )
-    sys.exit(1)
+except Exception as e:  # pragma: no cover - should rarely happen
+    print(f"Error importing default data paths: {e}")
+    DEFAULT_POINTS_FILE = "input-data/default/default_points.csv"
+    DEFAULT_ORIENTATIONS_FILE = "input-data/default/default_orientations.csv"
+    DEFAULT_STRUCTURE_FILE = "input-data/default/default_structure.csv"
 
 
 def main():
@@ -107,6 +97,18 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Import heavy dependencies lazily after argument parsing so --help works
+    try:
+        from hutton_lm.pdf_parser import extract_text_from_pdf, extract_images_from_pdf
+        from hutton_lm.llm_interface import (
+            llm_consolidate_parsed_text,
+            llm_generate_dsl_summary,
+        )
+        from hutton_lm.cli import run_core_gempy_workflow
+    except Exception as e:  # pragma: no cover - missing optional deps
+        print(f"Error: Required modules could not be loaded: {e}")
+        sys.exit(1)
 
     # --- Setup ---
     base_output_dir = args.output_dir

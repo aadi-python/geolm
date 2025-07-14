@@ -51,6 +51,13 @@ def _sanitize_csv_headers(path: str, expected_headers: Iterable[str]) -> str:
     if mapping:
         df.rename(columns=mapping, inplace=True)
 
+    missing = [h for h in expected_headers if h not in df.columns]
+    if missing:
+        raise ValueError(
+            f"CSV file '{path}' is missing expected columns: {missing}. "
+            "Available columns: " + ", ".join(df.columns)
+        )
+
     tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".csv")
     df.to_csv(tmp.name, index=False)
     tmp.close()

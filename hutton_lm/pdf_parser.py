@@ -1,7 +1,17 @@
 import os
-import PyPDF2
-from tqdm import tqdm
 from typing import Optional
+
+try:
+    import PyPDF2  # type: ignore
+except Exception:  # pragma: no cover - graceful runtime import
+    PyPDF2 = None
+
+try:
+    from tqdm import tqdm
+except Exception:  # pragma: no cover - graceful runtime import
+    def tqdm(iterable, *args, **kwargs):
+        """Fallback tqdm that just returns the iterable."""
+        return iterable
 
 def validate_pdf(file_path: str) -> bool:
     if not os.path.exists(file_path):
@@ -16,6 +26,10 @@ def validate_pdf(file_path: str) -> bool:
 def extract_text_from_pdf(file_path: str, max_chars: int = -1) -> Optional[str]:
     # max_chars = -1 for no text length limit
     if not validate_pdf(file_path):
+        return None
+
+    if PyPDF2 is None:
+        print("Error: PyPDF2 is not available. Cannot parse PDF text.")
         return None
 
     try:
@@ -52,11 +66,11 @@ def extract_text_from_pdf(file_path: str, max_chars: int = -1) -> Optional[str]:
             print(f"\nExtraction complete! Total characters: {len(final_text)}")
             return final_text
 
-    except PyPDF2.errors.PdfReadError:  # More specific exception
-        print("Error: Invalid or corrupted PDF file")
-        return None
-    except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
+    except Exception as e:  # pragma: no cover - runtime safety
+        if PyPDF2 is not None and isinstance(e, PyPDF2.errors.PdfReadError):
+            print("Error: Invalid or corrupted PDF file")
+        else:
+            print(f"An unexpected error occurred: {e}")
         return None
 
 

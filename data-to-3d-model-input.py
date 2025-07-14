@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime
 import re
 import csv
+import io
 import requests
 
 # --- Global Constants for Default Data ---
@@ -156,6 +157,54 @@ def generate_data_with_llm(client_info, prompt, temperature):
         return None
 
 
+def _remove_index_column(csv_text: str) -> str:
+    """Return CSV text with any leading index column removed."""
+    try:
+        lines = list(csv.reader(io.StringIO(csv_text)))
+        if not lines:
+            return csv_text
+        header = lines[0]
+        if header and (header[0] == "" or header[0].lower().startswith("unnamed")):
+            lines = [row[1:] for row in lines]
+        output = io.StringIO()
+        csv.writer(output, lineterminator="\n").writerows(lines)
+        return output.getvalue().strip()
+    except Exception:
+        # If any parsing error occurs, return original text
+        return csv_text
+
+
+def _sanitize_headers_in_csv(csv_text: str, expected_headers: list[str]) -> str:
+    """Normalize header names using pandas if available."""
+    try:
+        import pandas as pd
+    except Exception:
+        return csv_text
+
+    try:
+        df = pd.read_csv(io.StringIO(csv_text))
+        df.columns = [str(c).strip() for c in df.columns]
+        df = df.loc[:, ~df.columns.str.match(r"^Unnamed")]  # drop index cols
+
+        def _norm(name: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", name.strip().lower())
+
+        expected_map = {_norm(e): e for e in expected_headers}
+        mapping = {}
+        for col in list(df.columns):
+            n = _norm(col)
+            if n in expected_map:
+                mapping[col] = expected_map[n]
+        if mapping:
+            df.rename(columns=mapping, inplace=True)
+
+        out = io.StringIO()
+        df.to_csv(out, index=False, lineterminator="\n")
+        return out.getvalue().strip()
+    except Exception:
+        return csv_text
+
+
 def parse_llm_response(llm_response_object):
     """Parses the OpenRouter API response to extract CSV data."""
     response_text = None
@@ -204,6 +253,19 @@ def parse_llm_response(llm_response_object):
         orientations_match.group(1).strip() if orientations_match else None
     )
     structure_csv = structure_match.group(1).strip() if structure_match else None
+
+    # Remove any leading index columns that may have been included
+    if points_csv:
+        points_csv = _remove_index_column(points_csv)
+        points_csv = _sanitize_headers_in_csv(
+            points_csv, ["X", "Y", "Z", "surface"]
+        )
+    if orientations_csv:
+        orientations_csv = _remove_index_column(orientations_csv)
+        orientations_csv = _sanitize_headers_in_csv(
+            orientations_csv,
+            ["X", "Y", "Z", "G_x", "G_y", "G_z", "surface"],
+        )
 
     if not points_csv or not orientations_csv or not structure_csv:
         print(
